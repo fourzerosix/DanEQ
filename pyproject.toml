@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daneq"
+dynamic = ["version"]
+description = "A btop-style terminal equalizer and spectrum visualizer for Linux audio"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Jeremy Bell" }]
+keywords = ["equalizer", "audio", "spectrum", "visualizer", "terminal", "tui", "pulseaudio", "pipewire"]
+classifiers = [
+  "Environment :: Console :: Curses",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+dependencies = ["numpy>=1.21", "scipy>=1.7"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+daneq = "daneq.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/fourzerosix/DanEQ"
+Issues = "https://github.com/fourzerosix/DanEQ/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "daneq.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["daneq*"]
