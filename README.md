@@ -25,7 +25,7 @@ pretty bars: it sits in the audio path, so the faders you move change what you h
 
 ## Why another one
 
-Tools like cava only visualize. DanEQ equalizes, and it checks itself: `daneq --selftest`
+Other tools online only visualize. DanEQ equalizes, and it checks itself: `daneq --selftest`
 pushes real sine tones through the filters and compares the measured gain to the response curve
 shown in the UI (worst error is 0.000 dB across 4, 6, 8 and 10 band layouts).
 
