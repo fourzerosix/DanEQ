@@ -16,38 +16,74 @@ shown in the UI (worst error is 0.000 dB across 4, 6, 8 and 10 band layouts).
 
 ---
 
-```text
-
-██████╗  █████╗ ███╗   ██╗███████╗ ██████╗          ________________________
-██╔══██╗██╔══██╗████╗  ██║██╔════╝██╔═══██╗         | ██ ██ ██ ██ ██ ██ |2||
-██║  ██║███████║██╔██╗ ██║█████╗  ██║   ██║         | ██ ██ ██ ██ ██ ██ |0||
-██║  ██║██╔══██║██║╚██╗██║██╔══╝  ██║   ██║         | ██ ██ R.I.P ██ ██ |2||
-██████╔╝██║  ██║██║ ╚████║███████╗╚██████╔╝         | ██ ██ D.J.E ██ ██ |6||
-╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝ ╚═══██╗          | ██ ██ ██ ██ ██ ██ |J||
-  |                |                  ╚═══╝         | ██ ██ ██ ██ ██ ██ |B||
-╭─┤Spectrum post-EQ├────────────────────────────────┤band 6/10: 1kHz +6.0dB├─╮
-│ -10  braille spectrum, 2 bars per cell, peak-hold caps, dB scale             │
-╰──────────────────────────────────────────────────────────────────────────────╯
-╭─┤Equalizer 10-band├──╮╭─┤Response├──────────────────────┤preamp +0.0dB├─╮
-│ faders (mouse + keys) ││ exact filter curve, drawn in braille            │
-│                       │╭─┤Levels├───────────────────────────────┤dBFS├────╮
-╰───────────────────────╯╰────────────────────────────────────────────────────╯
-```
-
 ## Features
 
-- 4, 6, 8 or 10 band EQ (`--bands`), +/-12 dB per band, preamp, bypass (A/B), mute, presets
-- RBJ biquad filters (low shelf, peaking, high shelf) running in real time with NumPy/SciPy
-- Three braille views (`v`): spectrum with peak-hold caps, scrolling waterfall, oscilloscope
-- Live frequency response curve of the exact filters being applied
-- L/R level meters with peak hold and clip indicator; soft knee limiter protects your speakers
-- Auto headroom (`a`): sets the preamp so your boosts can never clip
+**Equalizer**
+- 4, 6, 8 or 10 band EQ (`--bands`), +/-12 dB per band, preamp, bypass (A/B), mute, presets, auto headroom
+- RBJ biquad filters running in real time with NumPy/SciPy; the response curve shows the exact filters in use,
+  with boost and cut areas shaded
 - Export your curve as Equalizer APO / EasyEffects text (`e` or `daneq --export`)
-- Five color themes (`c` or `--theme`): classic, ice, fire, synthwave, mono
-- In-app help (`?`), mouse support: click or drag faders, wheel to nudge, double click to zero
-- Works on PulseAudio and PipeWire (via pipewire-pulse); no kernel modules, no root
-- Built-in test signals (`--demo music|pink|sweep`) so it runs on machines with no sound card
-- Plays files too (WAV natively, anything else through ffmpeg)
+
+**Effects rack (`f`)**: compressor (with gain reduction readout), overdrive, bitcrusher, megaphone,
+phaser, flanger, chorus, tremolo/auto-pan, echo, reverb, stereo widener. Every effect has braille rotary
+knobs you can drive with keys, mouse wheel or click. Start with some on: `daneq --fx reverb,echo`.
+
+**Visuals (`v` / `V`, `--view`)**: spectrum (6 bar styles on `g`), waterfall, scope, vectorscope, radial,
+spinning vinyl record, reel-to-reel tape deck, fire, starfield, ripples, matrix rain.
+20 color themes (`c`), 60 fps with smooth physics, multi-resolution FFT.
+
+**Nerd mode (`n`)**: btop-style view of audio processes (servers, clients, ALSA users) with CPU, memory and
+sparklines, plus streams, devices, server info and a DSP load graph.
+
+**Layout**: resize panels with `(` `)` `{` `}` or by dragging panel borders with the mouse.
+
+**Plumbing**: PulseAudio and PipeWire (via pipewire-pulse), no kernel modules, no root. Plays files too
+(WAV natively; anything else through ffmpeg or the optional soundfile package).
+
+## Test signals and easter eggs
+
+All synthesized from scratch, so there are no licensing questions. They are cartoon-style approximations
+and not recordings, but they have real spectral content, which is what makes them good EQ and FX test material.
+
+```
+daneq --bear | --lion | --cat | --dog | --wolf | --cow | --sheep | --duck | --bird | --frog
+daneq --owl | --rooster | --horse | --elephant | --pig | --whale | --cricket | --zoo
+daneq --cartoon        slide whistle, boing, bonk, xylophone, sad trombone, ta-da, record scratch
+daneq --loudspeaker    speech-like babble through a bullhorn (try it with the Megaphone effect)
+daneq --binaural --beat alpha --carrier 220     headphones recommended
+daneq --dialup | --dtmf | --siren | --morse
+daneq --tetris | --ode | --elise | --birthday   chiptune melodies (all public domain compositions)
+daneq --pink | --white | --brown | --sweep | --music
+daneq --list-demos
+```
+
+Binaural beats: the left and right ears get tones `beat` Hz apart. `--beat` takes a number or delta (2),
+theta (6), alpha (10), beta (20), gamma (40) or schumann (7.83). The vectorscope shows the phase drifting.
+This is a test signal, not a medical device.
+
+### Public domain recordings
+
+`daneq --list-clips` lists the built-in library, which downloads on first use into `~/.cache/daneq/clips`
+(nothing is bundled in this repo):
+
+```
+daneq --clip moon       Apollo 11 "one small step" (NASA)
+daneq --clip infamy     FDR, "a date which will live in infamy"
+daneq --clip fdr        FDR, full 8 Dec 1941 address
+daneq --clip jfk        JFK inaugural address
+daneq --clip cuba       JFK Cuban Missile Crisis address
+daneq --clip https://example.org/some.ogg      any URL
+daneq --clip ~/Music/thing.flac                any file
+```
+
+These are works of the US government (public domain under 17 USC 105) hosted on Wikimedia Commons.
+Add your own named clips in `~/.config/daneq/clips.json`:
+
+```
+{"mything": {"url": "https://.../file.ogg", "about": "what it is and why it is free to use"}}
+```
+
+Ogg and other compressed formats need ffmpeg, or `pip install "daneq[audio]"` on hosts without it.
 
 ## Install
 
@@ -122,6 +158,12 @@ may need `--latency 15`.
 | c | cycle color theme |
 | e | export Equalizer APO text |
 | ? | help |
+| f | FX rack (Tab or 1-9 pick effect, o toggles, arrows adjust knobs, b bypasses the rack) |
+| v / V | next / previous view |
+| g | spectrum bar style |
+| c / C | next / previous theme |
+| n | nerd mode |
+| ( ) / { } | resize panels |
 | s | save settings |
 | q | quit (settings are saved automatically) |
 
@@ -165,3 +207,23 @@ Releases: push a `vX.Y.Z` tag. The workflow publishes to PyPI (trusted publishin
 ## License
 
 MIT
+
+---
+
+```text
+
+██████╗  █████╗ ███╗   ██╗███████╗ ██████╗          ________________________
+██╔══██╗██╔══██╗████╗  ██║██╔════╝██╔═══██╗         | ██ ██ ██ ██ ██ ██ |2||
+██║  ██║███████║██╔██╗ ██║█████╗  ██║   ██║         | ██ ██ ██ ██ ██ ██ |0||
+██║  ██║██╔══██║██║╚██╗██║██╔══╝  ██║   ██║         | ██ ██ R.I.P ██ ██ |2||
+██████╔╝██║  ██║██║ ╚████║███████╗╚██████╔╝         | ██ ██ D.J.E ██ ██ |6||
+╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝ ╚═══██╗          | ██ ██ ██ ██ ██ ██ |J||
+  |                |                  ╚═══╝         | ██ ██ ██ ██ ██ ██ |B||
+╭─┤Spectrum post-EQ├────────────────────────────────┤band 6/10: 1kHz +6.0dB├─╮
+│ -10  braille spectrum, 2 bars per cell, peak-hold caps, dB scale             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─┤Equalizer 10-band├──╮╭─┤Response├──────────────────────┤preamp +0.0dB├─╮
+│ faders (mouse + keys) ││ exact filter curve, drawn in braille            │
+│                       │╭─┤Levels├───────────────────────────────┤dBFS├────╮
+╰───────────────────────╯╰────────────────────────────────────────────────────╯
+```
