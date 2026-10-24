@@ -1,7 +1,3 @@
-# DanEQ
-
----
-
 ![DanEQ](https://github.com/fourzerosix/DanEQ/blob/main/daneq/neon-daneq-graffiti.png)
 
 ---
