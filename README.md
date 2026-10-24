@@ -1,7 +1,8 @@
-# DanEQ
+![DanEQ](https://github.com/fourzerosix/DanEQ/blob/main/daneq/daneq-logo-full.jpg)
 
 ---
 
+# DanEQ
 A btop-style terminal equalizer and spectrum visualizer for Linux. It does not just draw
 pretty bars: it sits in the audio path, so the faders you move change what you hear.
 
@@ -9,10 +10,6 @@ pretty bars: it sits in the audio path, so the faders you move change what you h
 *Other tools online only visualize*. DanEQ equalizes, and it checks itself: `daneq --selftest`
 pushes real sine tones through the filters and compares the measured gain to the response curve
 shown in the UI (worst error is 0.000 dB across 4, 6, 8 and 10 band layouts).
-
----
-
-![DanEQ](https://github.com/fourzerosix/DanEQ/blob/main/daneq/daneq-logo-full.jpg)
 
 ---
 
