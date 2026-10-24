@@ -1,4 +1,7 @@
-#DanEQ
+# DanEQ
+
+---
+
 A btop-style terminal equalizer and spectrum visualizer for Linux. It does not just draw
 pretty bars: it sits in the audio path, so the faders you move change what you hear.
 
