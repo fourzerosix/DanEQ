@@ -12,7 +12,7 @@ shown in the UI (worst error is 0.000 dB across 4, 6, 8 and 10 band layouts).
 
 ---
 
-![DanEQ](https://github.com/fourzerosix/DanEQ/blob/main/daneq/daneq-logo.png)
+![DanEQ](https://github.com/fourzerosix/DanEQ/blob/main/daneq/daneq-logo-full.jpg)
 
 ---
 
