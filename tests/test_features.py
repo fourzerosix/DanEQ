@@ -170,3 +170,69 @@ def test_builtin_clips_are_https_urls_with_notes():
     assert set(clips.BUILTIN) >= {"moon", "infamy", "jfk"}
     for v in clips.BUILTIN.values():
         assert v["url"].startswith("https://") and v["about"]
+
+
+def test_new_public_domain_melodies_stream():
+    for name in ("grace", "twinkle", "row", "jingle", "silentnight", "yankee", "susanna", "canon"):
+        gen = sounds.ALL[name](RATE, 1024)
+        x = np.vstack([next(gen) for _ in range(30)])
+        assert x.shape == (30720, 2) and np.isfinite(x).all() and np.abs(x).max() > 0.05, name
+
+
+def test_amazing_grace_matches_the_hymnwiki_score():
+    """35 notes in 3/4 with two quarter-note pick-ups: 14 full bars plus 2 beats."""
+    bpm, notes = sounds.MELODIES["grace"]
+    toks = [t for t in notes.split() if not t.startswith("R:")]
+    total = sum(float(t.split(":")[1]) for t in toks)
+    assert bpm == 90 and len(toks) == 35 and total == 44.0 and (total - 2) % 3 == 0
+    assert toks[0] == "D4:1" and toks[-1] == "G4:3"
+
+
+def test_portaudio_device_selection_with_a_fake_backend(monkeypatch):
+    from daneq import audio
+
+    class FakeSd:
+        default = type("D", (), {"device": (0, 3)})()
+
+        @staticmethod
+        def query_devices():
+            mk = lambda n, i, o, r=48000: {"name": n, "max_input_channels": i, "max_output_channels": o, "default_samplerate": r}  # noqa: E731
+            return [mk("MacBook Pro Microphone", 1, 0), mk("BlackHole 2ch", 2, 2), mk("External Headphones", 0, 2), mk("BlackHole 16ch", 16, 16)]
+
+    monkeypatch.setattr(audio, "_sd", lambda: FakeSd)
+    assert audio.pick_loopback()[1] == "BlackHole 2ch"
+    assert audio.pick_output()[1] != "BlackHole 16ch"          # default output is virtual, so it must be skipped
+    assert audio.pick_output()[1] == "External Headphones"
+    assert audio.find_device("headphones", "output")[0] == 2
+    assert audio.find_device("1", "input")[1] == "BlackHole 2ch"
+    with pytest.raises(audio.AudioError):
+        audio.find_device("nothing-like-this", "input")
+
+
+def test_sdsink_reshapes_bytes_to_stereo(monkeypatch):
+    from daneq import audio
+    written = []
+
+    class Stream:
+        def __init__(self, **kw):
+            pass
+
+        def start(self):
+            pass
+
+        def write(self, arr):
+            written.append(arr)
+
+    fake = type("Sd", (), {"OutputStream": Stream})
+    monkeypatch.setattr(audio, "_sd", lambda: fake)
+    sink = audio.SdSink(0, 48000, 1024)
+    sink.write(np.zeros((16, 2), dtype="<f4").tobytes())
+    assert written[0].shape == (16, 2)
+
+
+def test_setup_cfg_carries_the_metadata():
+    import configparser
+    cp = configparser.ConfigParser()
+    cp.read("setup.cfg")
+    assert cp["metadata"]["name"] == "daneq" and "daneq = daneq.cli:main" in cp["options.entry_points"]["console_scripts"]
+    assert "sounddevice" in cp["options"]["install_requires"]
