@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--list-clips", action="store_true", help="list the clip library and exit")
     src.add_argument("--list-demos", action="store_true", help="list all built-in signals and exit")
     io = p.add_argument_group("audio routing")
+    io.add_argument("--backend", choices=["auto", "pulse", "portaudio"], default="auto",
+                    help="audio backend: pulse (Linux, default there) or portaudio (macOS default)")
+    io.add_argument("--input", metavar="DEVICE", help="portaudio: capture device name or number (default: BlackHole/loopback)")
+    io.add_argument("--output", metavar="DEVICE", help="portaudio: output device name or number (default: system output)")
+    io.add_argument("--list-devices", action="store_true", help="portaudio: list audio devices and exit")
     io.add_argument("--no-output", action="store_true", help="do not play audio, just process and visualize")
     io.add_argument("--sink", metavar="NAME", help="output sink (default: current default sink)")
     io.add_argument("--capture", metavar="SOURCE", help="capture from this source instead of the virtual sink")
@@ -142,6 +147,13 @@ def main(argv=None) -> int:
             eq.set_gains(preset_gains(args.preset, eq.freqs))
         print(to_apo(eq), end="")
         return 0
+    if args.list_devices:
+        try:
+            for i, name, n_in, n_out, rate, virt in audio.list_devices():
+                print(f"{i:3d}  in={n_in} out={n_out}  {rate}Hz  {name}{'  [virtual]' if virt else ''}")
+        except audio.AudioError as exc:
+            return _die(str(exc))
+        return 0
     if args.list or args.restore:
         try:
             if args.restore:
@@ -173,6 +185,11 @@ def main(argv=None) -> int:
         except clips.ClipError as exc:
             return _die(str(exc))
     live = not (target or args.demo)
+    backend = args.backend
+    if backend == "auto":
+        backend = "pulse" if (sys.platform.startswith("linux") and audio.have_pulse_tools()) else \
+                  ("portaudio" if audio.have_portaudio() else "pulse")
+    mac_in = route = None
 
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(0))
@@ -190,6 +207,11 @@ def main(argv=None) -> int:
             source = audio.GenSource(sounds.ALL[args.demo](rate, BLOCK, **opts))
             if args.demo == "binaural":
                 mode = f"binaural {opts['beat']:g} Hz beat (use headphones)"
+        if live and backend == "portaudio" and not args.no_output:
+            mac_in = audio.find_device(args.input or args.capture, "input") if (args.input or args.capture) else audio.pick_loopback()
+            if mac_in is None:
+                return _die("no loopback capture device found.\n" + audio.mac_help())
+            rate = mac_in[4]
         eq = Equalizer(nb, rate, 2)
         saved = cfg.get("gains", {}).get(str(nb))
         if saved:
@@ -213,14 +235,30 @@ def main(argv=None) -> int:
             cfg["nerd_start"] = True
 
         dst = "(no output)"
+        src = ""
         if args.no_output:
             if live:
                 return _die("--no-output needs FILE, --demo or a sound shortcut")
             sink = audio.NullSink(rate)
+        elif backend == "portaudio":
+            if not audio.have_portaudio():
+                return _die("the portaudio backend needs: pip install sounddevice\n" + (audio.mac_help() if sys.platform == "darwin" else ""))
+            out = audio.find_device(args.output, "output") if args.output else audio.pick_output()
+            if out is None:
+                return _die("no real output device found (try --list-devices and --output NAME)")
+            if live:
+                source = audio.SdSource(mac_in[0], rate, BLOCK)
+                src = f"capture '{mac_in[1]}'"
+                if sys.platform == "darwin":
+                    route = audio.MacRoute(mac_in[1])
+                    if not route.open():
+                        src += f" (set Sound Output to '{mac_in[1]}')"
+            dst = out[1]
+            sink = audio.SdSink(out[0], rate, BLOCK)
         else:
             if not audio.have_pulse_tools():
                 return _die("pactl/parec/pacat not found. Install pulseaudio-utils (works with PipeWire too), "
-                            "or use --demo --no-output")
+                            "or use --demo --no-output" + (("\n" + audio.mac_help()) if sys.platform == "darwin" else ""))
             if live and not args.capture:
                 vsink = audio.VirtualSink(rate, args.sink)
                 dst = vsink.open()
@@ -267,3 +305,5 @@ def main(argv=None) -> int:
                     pass
         if vsink is not None:
             vsink.close()
+        if route is not None:
+            route.close()

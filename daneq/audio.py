@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 import time
 import wave
 from typing import List, Optional, Tuple
@@ -335,3 +336,158 @@ def _kill(proc: subprocess.Popen) -> None:
             proc.kill()
         except Exception:  # noqa: BLE001
             pass
+
+
+# ---- PortAudio backend (macOS via BlackHole/Loopback, also usable elsewhere) ---------------
+VIRTUAL_HINTS = ("blackhole", "loopback", "soundflower", "vb-cable", "vb-audio", "background music", "eqmac", "daneq")
+
+
+def have_portaudio() -> bool:
+    try:
+        import sounddevice  # noqa: F401
+        return True
+    except Exception:  # noqa: BLE001 - missing module or missing PortAudio library
+        return False
+
+
+def _sd():
+    try:
+        import sounddevice as sd
+    except Exception as exc:  # noqa: BLE001
+        raise AudioError("the PortAudio backend needs the 'sounddevice' package: pip install sounddevice "
+                         f"({exc})")
+    return sd
+
+
+def list_devices() -> list:
+    """[(index, name, max_in, max_out, default_rate, is_virtual)]"""
+    sd = _sd()
+    out = []
+    for i, d in enumerate(sd.query_devices()):
+        name = d["name"]
+        out.append((i, name, d["max_input_channels"], d["max_output_channels"],
+                    int(d["default_samplerate"]), any(h in name.lower() for h in VIRTUAL_HINTS)))
+    return out
+
+
+def find_device(match, kind: str):
+    """Pick a device index by case-insensitive name substring (or number) for 'input' or 'output'."""
+    devs = list_devices()
+    col = 2 if kind == "input" else 3
+    if match is not None and str(match).isdigit():
+        for d in devs:
+            if d[0] == int(match) and d[col] >= 1:
+                return d
+    if match is not None:
+        for d in devs:
+            if str(match).lower() in d[1].lower() and d[col] >= 1:
+                return d
+        raise AudioError(f"no {kind} device matching '{match}'. Try --list-devices")
+    return None
+
+
+def pick_loopback():
+    """Capture device for system audio: a virtual loopback driver such as BlackHole."""
+    for d in list_devices():
+        if d[5] and d[2] >= 2:
+            return d
+    return None
+
+
+def pick_output(avoid_virtual: bool = True):
+    """Real output: the system default unless it is virtual, else the first real stereo output."""
+    sd = _sd()
+    devs = list_devices()
+    try:
+        idx = sd.default.device[1]
+        if idx is not None and idx >= 0:
+            d = devs[idx]
+            if not (avoid_virtual and d[5]):
+                return d
+    except Exception:  # noqa: BLE001
+        pass
+    real = [d for d in devs if d[3] >= 2 and not d[5]]
+    pref = [d for d in real if any(k in d[1].lower() for k in ("speaker", "headphone", "built-in", "output"))]
+    return (pref or real or [None])[0]
+
+
+class SdSource:
+    """Live capture through PortAudio."""
+
+    def __init__(self, device: int, rate: int, block: int):
+        sd = _sd()
+        self.block = block
+        self.stream = sd.InputStream(device=device, samplerate=rate, channels=2, dtype="float32", blocksize=block)
+
+    def __iter__(self):
+        self.stream.start()
+        while True:
+            data, _ = self.stream.read(self.block)
+            yield np.ascontiguousarray(data, dtype=np.float32)
+
+    def close(self) -> None:
+        try:
+            self.stream.abort()
+            self.stream.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class SdSink:
+    """Playback through PortAudio. Same write(bytes) contract as PacatSink."""
+
+    def __init__(self, device, rate: int, block: int):
+        sd = _sd()
+        try:
+            self.stream = sd.OutputStream(device=device, samplerate=rate, channels=2, dtype="float32",
+                                          blocksize=block, latency="low")
+            self.stream.start()
+        except Exception as exc:  # noqa: BLE001
+            raise AudioError(f"cannot open output device: {exc}")
+
+    def write(self, data: bytes) -> None:
+        try:
+            self.stream.write(np.frombuffer(data, dtype="<f4").reshape(-1, 2))
+        except Exception as exc:  # noqa: BLE001
+            raise AudioError(f"playback stream closed: {exc}")
+
+    def close(self) -> None:
+        try:
+            self.stream.stop()
+            self.stream.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class MacRoute:
+    """Optionally points the macOS output at the loopback device (needs `brew install switchaudio-osx`)."""
+
+    def __init__(self, device_name: str):
+        self.name, self.prev = device_name, None
+        self.tool = shutil.which("SwitchAudioSource")
+
+    def open(self) -> bool:
+        if not self.tool:
+            return False
+        try:
+            self.prev = subprocess.run([self.tool, "-c", "-t", "output"], capture_output=True, text=True, timeout=5).stdout.strip()
+            subprocess.run([self.tool, "-s", self.name, "-t", "output"], capture_output=True, timeout=5)
+            return True
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    def close(self) -> None:
+        if self.tool and self.prev and self.prev != self.name:
+            try:
+                subprocess.run([self.tool, "-s", self.prev, "-t", "output"], capture_output=True, timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+
+
+def mac_help() -> str:
+    return ("macOS has no system-wide audio tap, so DanEQ needs a free virtual loopback device:\n"
+            "  brew install --cask blackhole-2ch        (then log out/in or reboot if macOS asks)\n"
+            "  brew install switchaudio-osx             (optional: lets DanEQ switch outputs for you)\n"
+            "Then run `daneq`. Without switchaudio-osx, set System Settings > Sound > Output to\n"
+            "'BlackHole 2ch' yourself before starting, and back to your speakers afterwards.\n"
+            "You can still use files and test signals without any of this:  daneq --demo pink")

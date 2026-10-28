@@ -18,8 +18,10 @@ from .themes import STEPS, THEME_ORDER, THEMES, gradient, rgb_to_256
 MIN_H = 24
 RANGE_DB = 44.0
 GRAD_8 = [2, 2, 3, 3, 1, 1]
+RIP = "R.I.P. D.J.E. [08/13/1976 - 11/01/2011]"
 VIEWS = ["Spectrum"]          # filled in by App (visual names follow)
 HELP = [
+    ("Esc", "menu (like btop)"),
     ("Left/Right h/l", "select band / knob"), ("Up/Down k/j", "gain / knob +- fine"),
     ("PgUp/PgDn K/J", "gain / knob +- coarse"), ("0", "zero band / reset knob"),
     ("r", "reset all (FX: reset effect)"), ("b", "bypass EQ (FX mode: rack)"),
@@ -103,6 +105,8 @@ class App:
         self.t = 0.0
         self.dt = 1 / 60.0
         self.show_help = False
+        self.menu = None                      # stack of [title, builder, index]
+        self.menu_rect = (0, 0, 0, 0, 0)
         self.msg, self.msg_until = "", 0.0
         self.drag = None
         self.lay = {}
@@ -244,7 +248,7 @@ class App:
             keys = ("FX:  </> knob  ^/v adjust  Tab effect  o on/off  b rack bypass  r reset  f back to EQ  "
                     "v view  ? help  q quit")
         else:
-            keys = ("? help  </> band  ^/v gain  b bypass  p preset  a headroom  f fx  v view  g style  "
+            keys = ("Esc menu  ? help  </> band  ^/v gain  b bypass  p preset  a headroom  f fx  v view  g style  "
                     "c theme  n nerd  q quit")
         self.put(self.H - 1, 1, keys, self.c.dim)
 
@@ -444,6 +448,142 @@ class App:
             self.put(y + 2 + i, x + 3, k, self.c.accent)
             self.put(y + 2 + i, x + 21, d, self.c.text)
 
+    # ---- dedication ------------------------------------------------------------------------
+    def draw_rip(self):
+        text = f"┤ {RIP} ├"
+        x = self.W - len(text) - 2
+        if x > 2:
+            self.put(self.H - 2, x, text, self.c.dim)
+
+    # ---- Esc menu ---------------------------------------------------------------------------
+    def _list_builder(self, names, current, apply):
+        def build():
+            cur = current()
+            return [(("● " if n == cur else "○ ") + n, (lambda n=n: self._apply(apply, n))) for n in names]
+        return build
+
+    @staticmethod
+    def _apply(apply, n):
+        apply(n)
+        return "stay"
+
+    def _set_view(self, name):
+        self.view = self.view_names.index(name)
+
+    def _set_style(self, name):
+        self.style = visuals.STYLES.index(name)
+        self.view = 0
+
+    def _set_theme(self, name):
+        self.c.set_theme(name)
+
+    def _set_preset(self, name):
+        self.eq.set_gains(preset_gains(name, self.eq.freqs))
+        self.preset = name
+
+    def _toggle_fx(self):
+        self.mode = "eq" if self.mode == "fx" else "fx"
+        self.nerd_on = False
+        return None
+
+    def _toggle_nerd(self):
+        if self.nerd:
+            self.nerd_on = not self.nerd_on
+            (self.collector.active.set if self.nerd_on else self.collector.active.clear)()
+        return None
+
+    def _do(self, fn):
+        fn()
+        return None
+
+    def _about_lines(self):
+        return [(f"DanEQ v{__version__}", lambda: "stay"), ("github.com/fourzerosix/DanEQ", lambda: "stay"),
+                ("MIT license  -  Jeremy Bell", lambda: "stay"), ("", lambda: "stay"), (RIP, lambda: "stay")]
+
+    def menu_main(self):
+        items = [
+            ("Resume", lambda: None),
+            (f"View          {self.view_names[self.view]}  >", lambda: ("push", "View", self._list_builder(self.view_names, lambda: self.view_names[self.view], self._set_view))),
+            (f"Bar style     {visuals.STYLES[self.style]}  >", lambda: ("push", "Bar style", self._list_builder(visuals.STYLES, lambda: visuals.STYLES[self.style], self._set_style))),
+            (f"Theme         {self.c.theme}  >", lambda: ("push", "Theme", self._list_builder(THEME_ORDER, lambda: self.c.theme, self._set_theme))),
+            (f"EQ preset     {self.preset}  >", lambda: ("push", "EQ preset", self._list_builder(PRESET_ORDER, lambda: self.preset, self._set_preset))),
+            (f"FX rack       {'shown' if self.mode == 'fx' else 'hidden'}", self._toggle_fx),
+        ]
+        if self.nerd:
+            items.append((f"Nerd mode     {'on' if self.nerd_on else 'off'}", self._toggle_nerd))
+        items += [
+            ("Auto headroom", lambda: self._do(lambda: self.flash(f"auto headroom: preamp {self.eq.auto_headroom():+.1f} dB"))),
+            ("Bypass EQ" if not self.eq.bypass else "Enable EQ", lambda: self._do(lambda: self.eq.set_bypass(not self.eq.bypass))),
+            ("Save settings", lambda: self._do(lambda: (self.save(), self.flash("settings saved")))),
+            ("Export Equalizer APO", lambda: self._do(self.export)),
+            ("Keyboard help", lambda: self._do(lambda: setattr(self, "show_help", True))),
+            ("About", lambda: ("push", "About", self._about_lines)),
+            ("Quit", lambda: "quit"),
+        ]
+        return items
+
+    def open_menu(self):
+        self.menu = [["DanEQ", self.menu_main, 0]]
+
+    def menu_activate(self, items, idx):
+        res = items[idx][1]()
+        if res is None:
+            self.menu = None
+        elif isinstance(res, tuple) and res[0] == "push":
+            self.menu.append([res[1], res[2], 0])
+        return res != "quit"
+
+    def menu_key(self, k) -> bool:
+        title, builder, idx = self.menu[-1]
+        items = builder()
+        n = len(items)
+        if k in (curses.KEY_UP, ord("k")):
+            idx = (idx - 1) % n
+        elif k in (curses.KEY_DOWN, ord("j")):
+            idx = (idx + 1) % n
+        elif k == curses.KEY_HOME:
+            idx = 0
+        elif k == curses.KEY_END:
+            idx = n - 1
+        elif k in (10, 13, curses.KEY_ENTER, ord(" "), curses.KEY_RIGHT, ord("l")):
+            self.menu[-1][2] = idx
+            return self.menu_activate(items, idx)
+        elif k in (27, curses.KEY_LEFT, ord("h"), ord("q"), ord("Q")):
+            self.menu.pop()
+            if not self.menu:
+                self.menu = None
+            return True
+        elif k == curses.KEY_MOUSE:
+            try:
+                _, mx, my, _, st = curses.getmouse()
+            except curses.error:
+                return True
+            y, x, w, cnt, top = self.menu_rect
+            if (st & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED)) and x <= mx < x + w and y <= my < y + cnt:
+                self.menu[-1][2] = top + my - y
+                return self.menu_activate(items, top + my - y)
+            return True
+        self.menu[-1][2] = min(idx, n - 1)
+        return True
+
+    def draw_menu(self):
+        title, builder, idx = self.menu[-1]
+        items = builder()
+        w = max(34, max(len(label) for label, _ in items) + 8)
+        rows = min(len(items), max(self.H - 8, 3))
+        top = min(max(idx - rows + 1, 0), len(items) - rows) if len(items) > rows else 0
+        h = rows + 4
+        y, x = max((self.H - h) // 2, 0), max((self.W - w) // 2, 0)
+        for r in range(h):
+            self.put(y + r, x, " " * w)
+        more = f"{idx + 1}/{len(items)}  " if len(items) > rows else ""
+        self.box(y, x, h, w, title, more + "Esc: back")
+        self.menu_rect = (y + 2, x + 1, w - 2, rows, top)
+        for i in range(rows):
+            label = items[top + i][0]
+            attr = (self.c.accent | curses.A_REVERSE) if top + i == idx else self.c.text
+            self.put(y + 2 + i, x + 1, (" " + label).ljust(w - 2), attr)
+
     # ---- frame ---------------------------------------------------------------------------------------
     def draw(self):
         self.scr.erase()
@@ -467,8 +607,11 @@ class App:
                 self.draw_response(by, L["left"], bh - 4, L["right"])
                 self.draw_meters(by + bh - 4, L["left"], 4, L["right"])
         self.draw_footer()
+        self.draw_rip()
         if self.show_help:
             self.draw_help()
+        if self.menu:
+            self.draw_menu()
         self.scr.refresh()
 
     # ---- input -----------------------------------------------------------------------------------------
@@ -562,6 +705,11 @@ class App:
         n = self.eq.nbands
         if self.show_help:
             self.show_help = False
+            return True
+        if self.menu:
+            return self.menu_key(k)
+        if k == 27:
+            self.open_menu()
             return True
         if k in (ord("q"), ord("Q")):
             return False

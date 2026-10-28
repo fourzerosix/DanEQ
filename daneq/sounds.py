@@ -332,6 +332,29 @@ def _parse(s):
 
 
 MELODIES = {
+    # Amazing Grace: NEW BRITAIN (Carrell and Clayton, 1831), notes taken from the public domain HymnWiki LilyPond score
+    "grace": (90, "D4:1 G4:2 B4:.5 G4:.5 B4:2 A4:1 G4:2 E4:1 D4:2 D4:1 G4:2 B4:.5 G4:.5 B4:2 A4:1 D5:3 "
+                  "B4:1 D5:1.5 B4:.5 D5:.5 B4:.5 G4:2 D4:1 E4:1.5 G4:.5 G4:.5 E4:.5 D4:2 "
+                  "D4:1 G4:2 B4:.5 G4:.5 B4:2 A4:1 G4:3 R:2"),
+    "twinkle": (120, "C4:1 C4:1 G4:1 G4:1 A4:1 A4:1 G4:2 F4:1 F4:1 E4:1 E4:1 D4:1 D4:1 C4:2 "
+                     "G4:1 G4:1 F4:1 F4:1 E4:1 E4:1 D4:2 G4:1 G4:1 F4:1 F4:1 E4:1 E4:1 D4:2 "
+                     "C4:1 C4:1 G4:1 G4:1 A4:1 A4:1 G4:2 F4:1 F4:1 E4:1 E4:1 D4:1 D4:1 C4:2"),
+    "row": (140, "C4:1 C4:1 C4:.67 D4:.33 E4:1 E4:.67 D4:.33 E4:.67 F4:.33 G4:2 "
+                 "C5:.33 C5:.33 C5:.33 G4:.33 G4:.33 G4:.33 E4:.33 E4:.33 E4:.33 C4:.33 C4:.33 C4:.33 "
+                 "G4:.67 F4:.33 E4:.67 D4:.33 C4:2"),
+    "jingle": (150, "E4:1 E4:1 E4:2 E4:1 E4:1 E4:2 E4:1 G4:1 C4:1.5 D4:.5 E4:4 "
+                    "F4:1 F4:1 F4:1.5 F4:.5 F4:1 E4:1 E4:1 E4:.5 E4:.5 E4:1 D4:1 D4:1 E4:1 D4:2 G4:2 "
+                    "E4:1 E4:1 E4:2 E4:1 E4:1 E4:2 E4:1 G4:1 C4:1.5 D4:.5 E4:4 "
+                    "F4:1 F4:1 F4:1.5 F4:.5 F4:1 E4:1 E4:1 E4:.5 E4:.5 G4:1 G4:1 F4:1 D4:1 C4:4"),
+    "silentnight": (80, "G4:1.5 A4:.5 G4:1 E4:3 G4:1.5 A4:.5 G4:1 E4:3 D5:2 D5:1 B4:3 C5:2 C5:1 G4:3 "
+                        "A4:2 A4:1 C5:1.5 B4:.5 A4:1 G4:1.5 A4:.5 G4:1 E4:3 "
+                        "A4:2 A4:1 C5:1.5 B4:.5 A4:1 G4:1.5 A4:.5 G4:1 E4:3 "
+                        "D5:2 D5:1 F5:1.5 D5:.5 B4:1 C5:3 E5:3 C5:1 G4:1 E4:1 G4:1.5 F4:.5 D4:1 C4:3 R:3"),
+    "yankee": (130, "C4:1 C4:1 D4:1 E4:1 C4:1 E4:1 D4:1 G3:1 C4:1 C4:1 D4:1 E4:1 C4:2 B3:2 "
+                    "C4:1 C4:1 D4:1 E4:1 F4:1 E4:1 D4:1 C4:1 B3:1 G3:1 A3:1 B3:1 C4:2 C4:2"),
+    "susanna": (150, "C4:.5 D4:.5 E4:1 G4:1.5 A4:.5 G4:1 E4:1 C4:.5 D4:.5 E4:1 E4:1 D4:1 C4:1 D4:2 "
+                     "C4:.5 D4:.5 E4:1 G4:1.5 A4:.5 G4:1 E4:1 C4:.5 D4:.5 E4:1 E4:.5 D4:.5 D4:1 C4:2"),
+    "canon": (76, "F#5:2 E5:2 D5:2 C#5:2 B4:2 A4:2 B4:2 C#5:2 F#5:2 E5:2 D5:2 C#5:2 B4:2 A4:2 B4:2 C#5:2"),
     "tetris": (150, "E5:1 B4:.5 C5:.5 D5:1 C5:.5 B4:.5 A4:1 A4:.5 C5:.5 E5:1 D5:.5 C5:.5 B4:1.5 C5:.5 D5:1 E5:1 C5:1 A4:1 A4:1 R:1 "
                     "D5:1.5 F5:.5 A5:1 G5:.5 F5:.5 E5:1.5 C5:.5 E5:1 D5:.5 C5:.5 B4:1 B4:.5 C5:.5 D5:1 E5:1 C5:1 A4:1 A4:1 R:1"),
     "ode": (116, "E4:1 E4:1 F4:1 G4:1 G4:1 F4:1 E4:1 D4:1 C4:1 C4:1 D4:1 E4:1 E4:1.5 D4:.5 D4:2 "
@@ -509,7 +532,10 @@ DESCRIPTIONS = {
     "zoo": "every animal in turn", "cartoon": "slide whistle, boing, bonk, sad trombone and friends",
     "dialup": "56k modem handshake (impressionistic)", "dtmf": "touch tones", "siren": "wail and yelp",
     "morse": "DANEQ in morse code", "loudspeaker": "speech-like babble through a bullhorn",
-    "tetris": "Korobeiniki (public domain folk tune) in chiptune", "ode": "Ode to Joy, chiptune",
+    "tetris": "Korobeiniki (public domain folk tune) in chiptune",
+    "grace": "Amazing Grace (NEW BRITAIN, public domain), chiptune", "twinkle": "Twinkle Twinkle Little Star",
+    "row": "Row, Row, Row Your Boat", "jingle": "Jingle Bells (1857)", "silentnight": "Silent Night (1818)",
+    "yankee": "Yankee Doodle", "susanna": "Oh! Susanna (Foster, 1848)", "canon": "Pachelbel's Canon, main melody", "ode": "Ode to Joy, chiptune",
     "elise": "Fur Elise, chiptune", "birthday": "Happy Birthday, chiptune",
 }
 for _a in ANIMALS:

@@ -226,6 +226,9 @@ class Collector(threading.Thread):
         sources = parse_devices(run("pactl", "list", "sources"), "Source #") if have else []
         if t - self._snd_t > 3.0:
             self._snd, self._snd_t = snd_users(), t
+        if not os.path.isdir("/proc"):
+            self.collect_ps(info_txt)
+            return
         names = {x["id"]: x["name"] for x in sinks + sources}
         for st in inputs + outputs:
             st["dev"] = names.get(st["dev"], st["dev"])
@@ -274,6 +277,50 @@ class Collector(threading.Thread):
         self.data = {"procs": procs, "sinks": sinks, "sources": sources, "inputs": inputs, "outputs": outputs,
                      "info": parse_info(info_txt), "cards": alsa_cards(), "alsa": alsa_running(),
                      "have_pactl": have, "t": t}
+
+
+MAC_NAMES = {"coreaudiod", "audiod", "audioclocksyncd", "BlackHole", "Music", "Spotify", "VLC", "mpv", "afplay",
+             "SwitchAudioSource", "parec", "pacat", "Audio Hijack", "Loopback", "eqMac", "Logic Pro X", "GarageBand"}
+
+
+def _collect_ps(self, info_txt):
+    """macOS and other systems without /proc: use ps, plus PortAudio devices when available."""
+    t = time.time()
+    out = run("ps", "-axo", "pid=,user=,pcpu=,rss=,stat=,comm=")
+    procs, mine = [], os.getpid()
+    for ln in out.splitlines():
+        parts = ln.split(None, 5)
+        if len(parts) < 6 or not parts[0].isdigit():
+            continue
+        pid, user, cpu, rss, state, comm = int(parts[0]), parts[1], float(parts[2] or 0), int(parts[3] or 0), parts[4], parts[5]
+        name = os.path.basename(comm)
+        tags = []
+        if name in ("coreaudiod", "audiod"):
+            tags.append("server")
+        if name in MAC_NAMES or any(h in name.lower() for h in ("blackhole", "audio")):
+            tags.append("tool" if "server" not in tags else "")
+        if pid == mine:
+            tags = ["daneq"]
+        if not [x for x in tags if x]:
+            continue
+        h = self._hist.setdefault(pid, deque(maxlen=16))
+        h.append(cpu)
+        procs.append({"pid": pid, "name": name[:24], "user": user, "state": state[:1], "cpu": cpu, "rss": rss / 1024.0,
+                      "threads": 0, "tags": ",".join(x for x in tags if x), "hist": list(h)})
+    devs = []
+    try:
+        from . import audio
+        for i, name, n_in, n_out, rate, virt in audio.list_devices():
+            devs.append({"id": str(i), "name": name, "desc": f"{name} ({rate}Hz{', virtual' if virt else ''})",
+                         "state": "IN" if n_in and not n_out else "OUT" if n_out and not n_in else "I/O",
+                         "spec": "", "vol": -1, "mute": False, "monitor": False, "driver": "coreaudio", "lat": -1.0})
+    except Exception:  # noqa: BLE001
+        pass
+    self.data = {"procs": procs, "sinks": devs, "sources": [], "inputs": [], "outputs": [], "info": {},
+                 "cards": [], "alsa": [], "have_pactl": False, "t": t}
+
+
+Collector.collect_ps = _collect_ps
 
 
 def spark(values, cells: int, vmax: float = 100.0) -> str:
