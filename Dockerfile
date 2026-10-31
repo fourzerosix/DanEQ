@@ -1,4 +1,14 @@
 # syntax=docker/dockerfile:1
+# DanEQ image: multi-arch friendly (amd64, arm64), non-root, ~250 MB.
+#
+#   docker build -t daneq .
+#   docker run -it --rm daneq                         # built-in demo, no audio device needed
+#   docker run -it --rm daneq --zoo --fx reverb --no-output
+#   docker run -it --rm -v "$XDG_RUNTIME_DIR/pulse:/run/pulse" -e PULSE_SERVER=unix:/run/pulse/native \
+#   daneq --demo                                      # real audio through the host's PulseAudio/PipeWire
+#
+# Live system-wide EQ (just `daneq`) needs the host audio server and is best run natively.
+
 FROM python:3.12-slim AS build
 WORKDIR /src
 COPY pyproject.toml setup.py setup.cfg README.md LICENSE MANIFEST.in ./
@@ -12,12 +22,15 @@ LABEL org.opencontainers.image.title="DanEQ" \
       org.opencontainers.image.source="https://github.com/fourzerosix/DanEQ" \
       org.opencontainers.image.url="https://fourzerosix.github.io/DanEQ/" \
       org.opencontainers.image.licenses="MIT"
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends pulseaudio-utils \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 daneq
+
 COPY --from=build /dist/*.whl /tmp/
 RUN pip install --no-cache-dir "$(ls /tmp/*.whl)[audio]" && rm -f /tmp/*.whl
+
 USER daneq
 ENV LANG=C.UTF-8 TERM=xterm-256color
 ENTRYPOINT ["daneq"]
