@@ -4,11 +4,29 @@
 
 # DanEQ
 
+[![CI](https://github.com/fourzerosix/DanEQ/actions/workflows/ci.yml/badge.svg)](https://github.com/fourzerosix/DanEQ/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/daneq)](https://pypi.org/project/daneq/)
+[![Docker](https://img.shields.io/docker/v/fourzerosix/daneq?sort=semver&label=docker)](https://hub.docker.com/r/fourzerosix/daneq)
+[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://fourzerosix.github.io/DanEQ/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 A btop-style terminal **equalizer, effects rack and audio visualizer** for Linux and macOS.
 It does not just draw pretty bars: it sits in the audio path, so the faders you move change what you hear,
 and `daneq --selftest` proves the filters match the curve on screen.
 
+```
+╭─┤Spectrum post-EQ├──────────────────────────────────┤braille  band 6/10: 1kHz +6.0dB├─╮
+│ -10  braille spectrum, 2 bars per cell, peak-hold caps, gradient colors, dB scale       │
+╰─────────────────────────────────────────────────────────────────────────────────────────╯
+╭─┤Equalizer 10-band├──╮╭─┤Response├──────────────────────────────────────┤preamp +0.0dB├─╮
+│ faders (keys + mouse) ││ exact filter curve with shaded boost/cut areas                  │
+│                       │╭─┤Levels├──────────────────────────────────────────────┤dBFS├────╮
+╰───────────────────────╯╰─────────────────────────────────────────────────────────────────╯
+```
+
 ## Contents
+
+Docs site: https://fourzerosix.github.io/DanEQ/
 
 1. [What you get](#what-you-get)
 2. [Platform support](#platform-support)
@@ -100,7 +118,15 @@ From other sources:
 ```bash
 pipx install git+https://github.com/fourzerosix/DanEQ     # straight from GitHub
 pipx install daneq                                          # from PyPI (after the first release)
-docker run -it --rm ghcr.io/fourzerosix/daneq --demo --no-output
+docker run -it --rm fourzerosix/daneq                      # Docker Hub: built-in demo, no audio device needed
+docker run -it --rm ghcr.io/fourzerosix/daneq --zoo --fx reverb --no-output     # same image from GHCR
+```
+
+Docker with real audio, passing the host's PulseAudio/PipeWire socket:
+
+```bash
+docker run -it --rm -v "$XDG_RUNTIME_DIR/pulse:/run/pulse" -e PULSE_SERVER=unix:/run/pulse/native \
+  fourzerosix/daneq --demo
 ```
 
 ### macOS
@@ -554,8 +580,8 @@ CI runs the tests on Linux and macOS. Packaging metadata lives in `setup.cfg` so
 
 ## Publishing
 
-See `PUBLISHING.md`: push to GitHub, optionally tag `vX.Y.Z` to publish to PyPI (trusted publishing) and
-`ghcr.io/fourzerosix/daneq`.
+Publishing a GitHub Release updates everything: PyPI, Docker Hub and GHCR (multi-arch), and the documentation
+site at https://fourzerosix.github.io/DanEQ/. See `RELEASING.md` for the one-time setup and the per-release steps.
 
 ## FAQ and roadmap
 
