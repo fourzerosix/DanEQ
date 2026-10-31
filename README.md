@@ -1,4 +1,4 @@
-![DanEQ](https://github.com/fourzerosix/DanEQ/blob/main/daneq/daneq-logo-full.jpg)
+![DanEQ](assets/images/daneq-logo-full.jpg)
 
 ---
 
