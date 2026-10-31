@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DanEQ - terminal equalizer, effects rack and audio visualizer</title>
+  <meta name="description" content="A btop-style terminal equalizer, effects rack and audio visualizer for Linux and macOS. Braille UI, 10-band EQ, 11 effects, 11 visualizations.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="index.html">DanEQ</a>
+  <a href="docs.html">Docs</a>
+  <a href="changelog.html">Changelog</a>
+  <a href="https://github.com/fourzerosix/DanEQ">GitHub</a>
+  <a href="https://pypi.org/project/daneq/">PyPI</a>
+  <a href="https://hub.docker.com/r/fourzerosix/daneq">Docker</a>
+</nav>
+
+<section class="hero">
+  <span class="badge">v@VERSION@</span>
+  <h1>DanEQ</h1>
+  <p>A btop-style <b>equalizer, effects rack and audio visualizer</b> for your terminal. It sits in the audio path,
+     so the faders change what you hear, and a built-in self-test proves the filters match the curve on screen.</p>
+  <div class="cta">
+    <a class="primary" href="#install">Install</a>
+    <a href="docs.html">Read the docs</a>
+    <a href="https://github.com/fourzerosix/DanEQ">Source</a>
+  </div>
+</section>
+
+<div class="term">
+  <div class="bar">daneq --demo music --no-output</div>
+  <div class="bars" id="bars" aria-hidden="true"></div>
+  <pre>10-band EQ | 11 effects | 11 views | 20 themes | 60 fps | braille everything</pre>
+</div>
+
+<h2>What you get</h2>
+<div class="grid">
+  <div class="card"><h3>Real equalizer</h3><p>4, 6, 8 or 10 bands, +/-12 dB, preamp, A/B bypass, presets, auto headroom. RBJ biquads in real time. Export to Equalizer APO.</p></div>
+  <div class="card"><h3>Effects rack</h3><p>Compressor, overdrive, bitcrusher, megaphone, phaser, flanger, chorus, tremolo, echo, reverb, widener, with braille rotary knobs.</p></div>
+  <div class="card"><h3>11 visualizations</h3><p>Spectrum with 6 styles, waterfall, scope, vectorscope, radial, spinning vinyl, reel-to-reel tape deck, fire, starfield, ripples, matrix.</p></div>
+  <div class="card"><h3>Nerd mode</h3><p>btop-style audio process, stream and device monitor for Linux engineers.</p></div>
+  <div class="card"><h3>Test signals</h3><p>Synthesized animals, cartoon effects, bullhorn, binaural beats, dial-up, public domain tunes like Amazing Grace, and real NASA, FDR and JFK clips.</p></div>
+  <div class="card"><h3>Runs where you work</h3><p>Linux (PulseAudio, PipeWire, ThinLinc), macOS (BlackHole), Docker. No root, no kernel modules.</p></div>
+</div>
+
+<h2 id="install">Install</h2>
+<div class="tabs" role="tablist">
+  <button class="on" data-t="pipx">pipx / pip</button>
+  <button data-t="linux">Linux script</button>
+  <button data-t="mac">macOS</button>
+  <button data-t="docker">Docker</button>
+</div>
+<div class="pane on" id="pipx"><pre><code>pipx install daneq
+daneq --selftest
+daneq --demo pink --no-output</code></pre></div>
+<div class="pane" id="linux"><pre><code>git clone https://github.com/fourzerosix/DanEQ.git &amp;&amp; cd DanEQ
+scripts/install.sh
+daneq                     # equalize everything playing on this machine</code></pre></div>
+<div class="pane" id="mac"><pre><code>git clone https://github.com/fourzerosix/DanEQ.git &amp;&amp; cd DanEQ
+scripts/install.sh        # offers Homebrew Python, BlackHole, switchaudio-osx
+daneq --list-devices
+daneq</code></pre></div>
+<div class="pane" id="docker"><pre><code>docker run -it --rm fourzerosix/daneq --demo --no-output
+# or from GitHub's registry:
+docker run -it --rm ghcr.io/fourzerosix/daneq --zoo --fx reverb --no-output</code></pre></div>
+
+<h2>Try these</h2>
+<pre><code>daneq --pink --no-output                 # boost a band, watch the spectrum bulge
+daneq --zoo --fx reverb --no-output      # every animal, with reverb
+daneq --grace --view vinyl --theme gold  # Amazing Grace on a spinning record
+daneq --binaural --beat alpha --view vectorscope
+daneq --clip moon --view scope           # Apollo 11, one small step
+daneq --nerd                             # audio processes, streams, devices</code></pre>
+
+<footer>MIT licensed. <a href="https://github.com/fourzerosix/DanEQ">github.com/fourzerosix/DanEQ</a></footer>
+
+<script>
+  const bars = document.getElementById('bars');
+  for (let i = 0; i < 56; i++) {
+    const b = document.createElement('i');
+    const bias = 1 - Math.abs(i - 14) / 70;               /* bass-heavy look */
+    b.style.animationDuration = (0.5 + Math.random() * 1.1) + 's';
+    b.style.animationDelay = (-Math.random() * 2) + 's';
+    b.style.height = (35 + 65 * Math.max(bias, .25) * (0.6 + Math.random() * 0.4)) + '%';
+    bars.appendChild(b);
+  }
+  document.querySelectorAll('.tabs button').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button, .pane').forEach(e => e.classList.remove('on'));
+    btn.classList.add('on');
+    document.getElementById(btn.dataset.t).classList.add('on');
+  }));
+</script>
+</body>
+</html>
