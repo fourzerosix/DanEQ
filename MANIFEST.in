@@ -1,0 +1,4 @@
+include README.md LICENSE CHANGELOG.md setup.cfg
+recursive-include tests *.py
+include scripts/*.sh
+global-exclude __pycache__ *.py[cod]
