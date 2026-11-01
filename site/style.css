@@ -1,6 +1,6 @@
 :root {
-  --bg: #0b0d12; --panel: #12151d; --line: #2a2f3c; --text: #d7dae0; --dim: #8b93a7;
-  --accent: #ff5fd7; --cyan: #00d7ff; --green: #5fff87; --warn: #ffd75f;
+  --bg: #07111f; --panel: #0d1b2e; --line: #1d3250; --text: #d5dfec; --dim: #8197b3;
+  --accent: #27d9a8; --cyan: #6ec1ff; --green: #5fff87; --warn: #ffd75f;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
 }
 * { box-sizing: border-box; }
@@ -31,13 +31,18 @@ header#title-block-header h1.title { margin-top: 1.2rem; }
 /* landing page */
 .hero { padding: 3rem 0 1rem; text-align: center; }
 .hero h1 { font-size: 3.2rem; margin: 0; letter-spacing: .05em; color: var(--accent); }
+.hero .logo { display: block; width: min(640px, 100%); margin: 1rem auto 0; border-radius: 14px; border: 1px solid var(--line); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .6rem; margin: 1rem 0; }
+.gallery img { width: 100%; height: 130px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); transition: transform .15s; }
+.gallery a:hover img { transform: scale(1.03); }
 .hero p { color: var(--dim); max-width: 42rem; margin: .8rem auto; }
 .badge { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: .1rem .8rem; color: var(--cyan); font-size: .85rem; }
 .cta { display: flex; gap: .8rem; justify-content: center; flex-wrap: wrap; margin: 1.4rem 0; }
 .cta a { border: 1px solid var(--accent); color: var(--accent); padding: .5rem 1.1rem; border-radius: 6px; }
-.cta a.primary { background: var(--accent); color: #111; font-weight: 700; }
+.cta a.primary { background: var(--accent); color: #04110d; font-weight: 700; }
 .cta a:hover { text-decoration: none; filter: brightness(1.15); }
-.term { background: #07080c; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 1.6rem 0; }
+.term { background: #050c16; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 1.6rem 0; }
 .term .bar { background: var(--panel); padding: .35rem .8rem; color: var(--dim); font-size: .8rem; border-bottom: 1px solid var(--line); }
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 150px; padding: 12px 14px 0; }
 .bars i { flex: 1; min-width: 3px; border-radius: 2px 2px 0 0; background: linear-gradient(to top, #00c846, #bedc00 55%, #ffc800 75%, #ff3c00);

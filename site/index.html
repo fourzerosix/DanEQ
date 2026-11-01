@@ -19,7 +19,8 @@
 
 <section class="hero">
   <span class="badge">v@VERSION@</span>
-  <h1>DanEQ</h1>
+  <h1 class="sr-only">DanEQ</h1>
+  <img class="logo" src="assets/images/daneq-logo-full.jpg" alt="DanEQ logo">
   <p>A btop-style <b>equalizer, effects rack and audio visualizer</b> for your terminal. It sits in the audio path,
      so the faders change what you hear, and a built-in self-test proves the filters match the curve on screen.</p>
   <div class="cta">
@@ -66,6 +67,11 @@ daneq</code></pre></div>
 # or from GitHub's registry:
 docker run -it --rm ghcr.io/fourzerosix/daneq --zoo --fx reverb --no-output</code></pre></div>
 
+<h2>Screenshots</h2>
+<div class="gallery">
+@GALLERY@
+</div>
+
 <h2>Try these</h2>
 <pre><code>daneq --pink --no-output                 # boost a band, watch the spectrum bulge
 daneq --zoo --fx reverb --no-output      # every animal, with reverb
@@ -74,7 +80,7 @@ daneq --binaural --beat alpha --view vectorscope
 daneq --clip moon --view scope           # Apollo 11, one small step
 daneq --nerd                             # audio processes, streams, devices</code></pre>
 
-<footer>MIT licensed. <a href="https://github.com/fourzerosix/DanEQ">github.com/fourzerosix/DanEQ</a></footer>
+<footer>GPL-3.0 licensed. <a href="https://github.com/fourzerosix/DanEQ">github.com/fourzerosix/DanEQ</a></footer>
 
 <script>
   const bars = document.getElementById('bars');
