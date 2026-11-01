@@ -9,14 +9,14 @@
 #
 # Live system-wide EQ (just `daneq`) needs the host audio server and is best run natively.
 
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /src
 COPY pyproject.toml setup.py setup.cfg README.md LICENSE MANIFEST.in ./
 COPY daneq ./daneq
 RUN pip install --no-cache-dir --upgrade pip build \
  && python -m build --wheel --outdir /dist
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 LABEL org.opencontainers.image.title="DanEQ" \
       org.opencontainers.image.description="Terminal equalizer, effects rack and audio visualizer with a btop-style braille UI" \
       org.opencontainers.image.source="https://github.com/fourzerosix/DanEQ" \
