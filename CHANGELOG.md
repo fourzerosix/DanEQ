@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+- Fix: nerd mode and its test crashed on macOS (no /proc); this also broke the macOS CI job that gates releases
+- License changed to GPL-3.0
+- Docs site: logo, screenshot gallery, teal theme; deploys on pushes to main as well as on releases
+- README logo uses an absolute URL so it renders on PyPI and Docker Hub
+- Release workflow files, CI, dependabot and issue templates are all in the repo
+
 ## 0.4.0
 - macOS support: PortAudio backend (`sounddevice`) with BlackHole loopback capture, automatic output switching via
   `switchaudio-osx`, `--backend`, `--input`, `--output`, `--list-devices`; nerd mode works without /proc
