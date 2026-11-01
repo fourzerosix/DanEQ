@@ -5,7 +5,7 @@
 #   docker run -it --rm daneq                         # built-in demo, no audio device needed
 #   docker run -it --rm daneq --zoo --fx reverb --no-output
 #   docker run -it --rm -v "$XDG_RUNTIME_DIR/pulse:/run/pulse" -e PULSE_SERVER=unix:/run/pulse/native \
-#   daneq --demo                                      # real audio through the host's PulseAudio/PipeWire
+#       daneq --demo                                  # real audio through the host's PulseAudio/PipeWire
 #
 # Live system-wide EQ (just `daneq`) needs the host audio server and is best run natively.
 
@@ -21,7 +21,7 @@ LABEL org.opencontainers.image.title="DanEQ" \
       org.opencontainers.image.description="Terminal equalizer, effects rack and audio visualizer with a btop-style braille UI" \
       org.opencontainers.image.source="https://github.com/fourzerosix/DanEQ" \
       org.opencontainers.image.url="https://fourzerosix.github.io/DanEQ/" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="GPL-3.0-only"
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends pulseaudio-utils \
