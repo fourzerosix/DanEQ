@@ -1,5 +1,10 @@
 name: Upload Python Package
 
+# Runs when you publish a GitHub Release (for example v0.4.0).
+# One-time PyPI setup (trusted publishing, no token needed):
+#   https://pypi.org/manage/account/publishing/  ->  "Add a new pending publisher"
+#     PyPI project name: daneq   Owner: fourzerosix   Repository: DanEQ
+#     Workflow name: python-publish.yml   Environment name: pypi
 on:
   release:
     types: [published]
@@ -17,8 +22,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
@@ -31,10 +36,11 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
       - name: Check that the release tag matches the package version
         if: github.event_name == 'release'
         run: |
@@ -45,11 +51,13 @@ jobs:
             echo "::error::Tag v$TAG does not match daneq/__init__.py version $PKG. Bump the version, then re-create the release."
             exit 1
           fi
+
       - name: Build sdist and wheel
         run: |
           python -m pip install build twine
           python -m build
           twine check dist/*
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-dists
@@ -64,13 +72,14 @@ jobs:
       name: pypi
       url: https://pypi.org/project/daneq/
     permissions:
-      id-token: write
+      id-token: write     # mandatory for trusted publishing
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: release-dists
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish release distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   attach-to-release:
     name: Attach wheel and sdist to the GitHub Release
@@ -84,6 +93,7 @@ jobs:
         with:
           name: release-dists
           path: dist/
-      - env:
+      - name: Upload to the release
+        env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber --repo "$GITHUB_REPOSITORY"

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+- Fix CI and release builds: copies of the test files in `scripts/` made pytest abort with "import file mismatch"
+  (exit code 2) on every runner. `setup.cfg` now pins `testpaths = tests` so stray files cannot do that again
+- GitHub Actions: checkout v5 and setup-python v6 (Node 24)
+
 ## 0.4.1
 - Fix: nerd mode and its test crashed on macOS (no /proc); this also broke the macOS CI job that gates releases
 - License changed to GPL-3.0

@@ -1,8 +1,16 @@
 name: Deploy site to Pages
 
+# Rebuilds https://fourzerosix.github.io/DanEQ/ whenever you publish a Release (or run it by hand).
+# One-time setup:
+#   1. repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
+#   2. repo Settings -> Environments -> github-pages -> Deployment branches and tags:
+#      add a TAG rule "v*" (release runs come from a tag, and the default rule only allows main)
 on:
   release:
     types: [published]
+  push:
+    branches: [main]
+    paths: ["site/**", "README.md", "CHANGELOG.md", "assets/**", ".github/workflows/static.yml"]
   workflow_dispatch:
 
 permissions:
@@ -21,16 +29,25 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v5
+
       - name: Install pandoc
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc
+
       - name: Build the site
         run: bash site/build.sh public
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
-      - id: deployment
+
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
