@@ -236,3 +236,28 @@ def test_setup_cfg_carries_the_metadata():
     cp.read("setup.cfg")
     assert cp["metadata"]["name"] == "daneq" and "daneq = daneq.cli:main" in cp["options.entry_points"]["console_scripts"]
     assert "sounddevice" in cp["options"]["install_requires"]
+
+
+def test_nerd_collector_works_without_proc(monkeypatch):
+    """macOS has no /proc: collection must fall back to ps instead of raising."""
+    real_isdir, real_listdir = nerd.os.path.isdir, nerd.os.listdir
+    monkeypatch.setattr(nerd.os.path, "isdir", lambda p: False if str(p) == "/proc" else real_isdir(p))
+
+    def listdir(p="."):
+        if str(p).startswith("/proc"):
+            raise FileNotFoundError(p)
+        return real_listdir(p)
+
+    monkeypatch.setattr(nerd.os, "listdir", listdir)
+    col = nerd.Collector()
+    col.collect()
+    assert any("daneq" in p["tags"] for p in col.data["procs"])
+    assert nerd.snd_users() == {}
+
+
+def test_license_metadata_is_gpl():
+    import configparser
+    cp = configparser.ConfigParser()
+    cp.read("setup.cfg")
+    assert cp["metadata"]["license"].startswith("GPL-3.0")
+    assert "GNU General Public License v3" in cp["metadata"]["classifiers"]
