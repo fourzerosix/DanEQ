@@ -1,4 +1,4 @@
-![DanEQ](assets/images/daneq-logo-full.jpg)
+![DanEQ](https://raw.githubusercontent.com/fourzerosix/DanEQ/main/assets/images/daneq-logo-full.jpg)
 
 ---
 
@@ -8,7 +8,7 @@
 [![PyPI](https://img.shields.io/pypi/v/daneq)](https://pypi.org/project/daneq/)
 [![Docker](https://img.shields.io/docker/v/fourzerosix/daneq?sort=semver&label=docker)](https://hub.docker.com/r/fourzerosix/daneq)
 [![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://fourzerosix.github.io/DanEQ/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 A btop-style terminal **equalizer, effects rack and audio visualizer** for Linux and macOS.
 It does not just draw pretty bars: it sits in the audio path, so the faders you move change what you hear,
@@ -595,7 +595,7 @@ Windows WASAPI loopback; a native iOS app; pitch shifting and convolution reverb
 
 ## License
 
-MIT. Public domain tunes and recordings keep their own status as described above.
+GPL-3.0 (see `LICENSE`). Public domain tunes and recordings keep their own status as described above.
 
 ---
 
