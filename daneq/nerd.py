@@ -131,7 +131,11 @@ def read_proc(pid: int):
 def snd_users() -> Dict[int, str]:
     """pid -> 'ALSA' for processes holding /dev/snd/* open (only those we may inspect)."""
     out = {}
-    for ent in os.listdir("/proc"):
+    try:
+        ents = os.listdir("/proc")
+    except OSError:
+        return out
+    for ent in ents:
         if not ent.isdigit():
             continue
         try:
@@ -219,6 +223,9 @@ class Collector(threading.Thread):
     def collect(self):
         t = time.time()
         info_txt = run("pactl", "info")
+        if not os.path.isdir("/proc"):          # macOS and other systems without /proc
+            self.collect_ps(info_txt)
+            return
         have = bool(info_txt)
         inputs = parse_streams(run("pactl", "list", "sink-inputs"), "Sink Input #") if have else []
         outputs = parse_streams(run("pactl", "list", "source-outputs"), "Source Output #") if have else []
@@ -226,9 +233,6 @@ class Collector(threading.Thread):
         sources = parse_devices(run("pactl", "list", "sources"), "Source #") if have else []
         if t - self._snd_t > 3.0:
             self._snd, self._snd_t = snd_users(), t
-        if not os.path.isdir("/proc"):
-            self.collect_ps(info_txt)
-            return
         names = {x["id"]: x["name"] for x in sinks + sources}
         for st in inputs + outputs:
             st["dev"] = names.get(st["dev"], st["dev"])

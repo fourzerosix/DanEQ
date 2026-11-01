@@ -498,7 +498,7 @@ class App:
 
     def _about_lines(self):
         return [(f"DanEQ v{__version__}", lambda: "stay"), ("github.com/fourzerosix/DanEQ", lambda: "stay"),
-                ("MIT license  -  Jeremy Bell", lambda: "stay"), ("", lambda: "stay"), (RIP, lambda: "stay")]
+                ("GPL-3.0 license  -  Jeremy Bell", lambda: "stay"), ("", lambda: "stay"), (RIP, lambda: "stay")]
 
     def menu_main(self):
         items = [
