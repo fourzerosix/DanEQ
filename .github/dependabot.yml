@@ -1,14 +1,28 @@
 version: 2
 updates:
+  # One grouped PR for all GitHub Actions bumps instead of one PR per action.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]
+
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "monthly"
+    ignore:
+      # The build backend requirement is kept loose on purpose so old pip/setuptools
+      # (for example Apple's Python 3.9) can still install DanEQ.
+      - dependency-name: "setuptools"
+
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "monthly"
+    ignore:
+      # Move the base image by hand after checking that numpy/scipy wheels exist for the new Python.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

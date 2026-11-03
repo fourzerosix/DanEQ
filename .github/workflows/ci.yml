@@ -1,16 +1,32 @@
 name: ci
-on: [push, pull_request]
+
+# Runs the tests on every pull request and on pushes to main.
+# (Release workflows have their own gate; see python-publish.yml.)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python: ["3.9", "3.11", "3.12"]
-        exclude:
-          - os: macos-latest
-            python: "3.9"
-    runs-on: ${{ matrix.os }}
+        include:
+          # 3.9 is end-of-life, so setup-python does not provide it on the newest Ubuntu images.
+          # Pin it to ubuntu-22.04 to keep testing the oldest version setup.cfg promises (>=3.9).
+          - { os: ubuntu-22.04, python: "3.9" }
+          - { os: ubuntu-latest, python: "3.10" }
+          - { os: ubuntu-latest, python: "3.12" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.12" }
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
