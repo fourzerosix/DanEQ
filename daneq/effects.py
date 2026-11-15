@@ -491,3 +491,45 @@ class FxRack:
                     except (TypeError, ValueError):
                         pass
             f.set_enabled(bool(d.get("on", False)))
+
+
+class SpeedControl(Effect):
+    """Knobs for file playback speed. Processing happens in the player, not in the effects chain.
+
+    pitch and tempo are independent; screw changes both together (a slowed record).
+    """
+
+    name, short = "Speed", "Speed"
+    desc = "File playback only. Pitch and tempo are independent; SCREW slows both together like a record"
+    PARAMS = [
+        ("pitch", "Pitch", -12.0, 12.0, 0.0, "st", "lin"),
+        ("tempo", "Tempo", 50.0, 200.0, 100.0, "%", "log"),
+        ("screw", "Screw", 0.5, 1.25, 1.0, "x", "log"),
+    ]
+
+    def __init__(self, rate: int = 48000):
+        super().__init__(rate)
+        self.enabled = True
+
+    def set_enabled(self, flag: bool) -> None:
+        self.enabled = bool(flag)
+
+    def effective(self):
+        """(pitch in semitones, tempo ratio, screw ratio); neutral when switched off."""
+        if not self.enabled:
+            return 0.0, 1.0, 1.0
+        return self.p["pitch"], self.p["tempo"] / 100.0, self.p["screw"]
+
+    def fmt(self, key) -> str:
+        v = self.p[key]
+        if key == "pitch":
+            return f"{v:+.1f}st"
+        if key == "tempo":
+            return f"{v:.0f}%"
+        return f"{v:.2f}x"
+
+    def summary(self) -> str:
+        pitch, tempo, screw = self.effective()
+        P = 2.0 ** (pitch / 12.0)
+        total_tempo, total_pitch = tempo * screw, 12.0 * math.log2(P * screw)
+        return f"now: tempo {total_tempo * 100:.0f}%  pitch {total_pitch:+.1f} st"

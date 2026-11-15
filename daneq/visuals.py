@@ -451,5 +451,139 @@ class Matrix(Visual):
                     cx.put(cx.iy + y, cx.ix + c, self.rng.choice(self.CHARS) if i < 3 or self.rng.random() < 0.05 else self.CHARS[(c * 7 + y * 3) % len(self.CHARS)], attr)
 
 
+class Tunnel(Visual):
+    name = "Tunnel"
+
+    def __init__(self):
+        self.u0 = 0.0
+        self.rot = 0.0
+
+    def draw(self, cx):
+        W, H = cx.w * 2, cx.h * 4
+        rmax = math.hypot(W, H) * 0.55
+        self.u0 = (self.u0 + cx.dt * (0.22 + cx.bass * 1.4)) % 1.0
+        self.rot += cx.dt * (0.25 + cx.mid * 1.2)
+        ccx = W / 2 + math.sin(cx.t * 0.6) * W * 0.06 * (0.3 + cx.mid)
+        ccy = H / 2 + math.cos(cx.t * 0.5) * H * 0.06 * (0.3 + cx.mid)
+        layers = [Canvas(cx.w, cx.h) for _ in range(3)]
+        rings, sides = 14, 6
+        for k in range(rings):
+            u = (k + self.u0) / rings                  # 0 far, 1 near
+            r = rmax * u ** 2.2
+            if r < 1.5:
+                continue
+            ang = self.rot + u * 2.2
+            pts = [(ccx + r * math.cos(ang + j * TAU / sides), ccy + r * 0.62 * math.sin(ang + j * TAU / sides)) for j in range(sides + 1)]
+            cv = layers[0 if u < 0.4 else 1 if u < 0.75 else 2]
+            for (x0, y0), (x1, y1) in zip(pts[:-1], pts[1:]):
+                cv.line(x0, y0, x1, y1)
+        for j in range(sides):                          # spokes
+            a = self.rot + j * TAU / sides
+            layers[0].line(ccx, ccy, ccx + rmax * math.cos(a), ccy + rmax * 0.62 * math.sin(a))
+        blit(cx.put, cx.iy, cx.ix, [(layers[0], cx.c.dim), (layers[1], cx.c.at(0.5)), (layers[2], cx.c.at(0.95))])
+
+
+class Plasma(Visual):
+    name = "Plasma"
+
+    def __init__(self):
+        self.phase = 0.0
+
+    def draw(self, cx):
+        w, h = cx.w, cx.h
+        self.phase += cx.dt * (0.8 + cx.bass * 3.0)
+        t = self.phase
+        x = np.linspace(0, 1, w)[None, :] * (6.0 + cx.mid * 6.0)
+        y = np.linspace(0, 1, h)[:, None] * (3.0 + cx.high * 4.0) * 2.0
+        v = (np.sin(x + t) + np.sin(y - t * 1.3) + np.sin((x + y) * 0.7 + t * 0.7)
+             + np.sin(np.hypot(x - 3.0, y - 1.5) * 1.3 - t * 2.0))
+        v = (v + 4.0) / 8.0
+        n_grad = len(cx.c.grad)
+        level = 0.45 + 0.55 * min(1.0, cx.bass * 1.5 + cx.mid * 0.5)
+        dots = np.clip((v * level * 9.0).astype(int), 0, 8)
+        ci = np.clip((v * (n_grad - 1) + 0.5).astype(int) // 2 * 2, 0, n_grad - 1)
+        for r in range(h):
+            j = 0
+            while j < w:
+                k = j
+                while k < w and ci[r, k] == ci[r, j]:
+                    k += 1
+                cx.put(cx.iy + r, cx.ix + j, "".join(SHADE[d] for d in dots[r, j:k]), cx.c.grad[ci[r, j]])
+                j = k
+
+
+class Aurora(Visual):
+    name = "Aurora"
+
+    def __init__(self):
+        self.t = 0.0
+
+    def draw(self, cx):
+        W, H = cx.w * 2, cx.h * 4
+        self.t += cx.dt
+        t = self.t
+        xs = np.arange(W)
+        bands = (cx.bass, cx.mid, cx.high)
+        layers = []
+        for k in range(3):
+            cv = Canvas(cx.w, cx.h)
+            amp = 0.10 + 0.18 * min(1.0, bands[k] * 1.6)
+            base = H * (0.42 + 0.13 * k)
+            yc = base + H * amp * np.sin(xs * (0.045 + 0.012 * k) + t * (0.7 + 0.35 * k) + k * 1.7) \
+                 + H * 0.05 * np.sin(xs * 0.11 - t * 1.3 + k)
+            length = (H * (0.20 + 0.45 * min(1.0, bands[k] * 1.4))) * (0.55 + 0.45 * np.sin(xs * 0.07 + t * 0.9 + k * 2.1) ** 2)
+            for x in range(W):
+                y0 = int(yc[x])
+                y1 = int(max(y0 - length[x], 0))
+                cv.a[y1:y0 + 1:2 if (x + k) % 2 == 0 else 3, x] = True
+                cv.set(x, y0)
+            layers.append((cv, cx.c.at(0.25 + 0.3 * k)))
+        blit(cx.put, cx.iy, cx.ix, layers[::-1])
+
+
+class VUMeters(Visual):
+    name = "VU meters"
+
+    def __init__(self):
+        self.pos = [0.0, 0.0]
+
+    @staticmethod
+    def _frac(db):
+        db = max(min(db, 3.0), -20.0)
+        return (db + 20.0) / 23.0                       # -20 dB at 0, +3 dB at 1
+
+    def draw(self, cx):
+        W, H = cx.w * 2, cx.h * 4
+        st = cx.stereo
+        rms = [0.0, 0.0]
+        if len(st):
+            rms = [float(np.sqrt(np.mean(st[:, 0] ** 2))), float(np.sqrt(np.mean(st[:, 1] ** 2)))]
+        arc, red, needle, ticks = Canvas(cx.w, cx.h), Canvas(cx.w, cx.h), Canvas(cx.w, cx.h), Canvas(cx.w, cx.h)
+        radius = min(W / 4.0 - 4, H * 0.82)
+        span = math.radians(100)                         # needle sweep, centered on straight up
+        for m in range(2):
+            level = 20.0 * math.log10(max(rms[m], 1e-5)) + 14.0     # -14 dBFS RMS reads as 0 VU
+            target = self._frac(level)
+            k = 1 - math.exp(-cx.dt * (6.0 if target > self.pos[m] else 3.5))   # roughly VU ballistics
+            self.pos[m] += (target - self.pos[m]) * k
+            pcx, pcy = W * (0.25 + 0.5 * m), H - 3
+            a0 = -math.pi / 2 - span / 2
+            for r in (radius, radius * 0.94):
+                arc.circle(pcx, pcy, r, a0, a0 + span * 0.87)
+                red.circle(pcx, pcy, r, a0 + span * 0.87, a0 + span)
+            for db in (-20, -10, -7, -5, -3, 0, 3):
+                f = self._frac(db)
+                a = a0 + f * span
+                tgt = red if db >= 0 else ticks
+                tgt.line(pcx + radius * 0.86 * math.cos(a), pcy + radius * 0.86 * math.sin(a),
+                         pcx + radius * 1.0 * math.cos(a), pcy + radius * 1.0 * math.sin(a))
+            a = a0 + self.pos[m] * span
+            needle.line(pcx, pcy, pcx + radius * 0.97 * math.cos(a), pcy + radius * 0.97 * math.sin(a))
+            needle.circle(pcx, pcy, 3.0)
+            cx.put(cx.iy + cx.h - 1, cx.ix + int(pcx / 2) - 3, f"{'L' if m == 0 else 'R'}  VU", cx.c.dim)
+        blit(cx.put, cx.iy, cx.ix, [(ticks, cx.c.dim), (arc, cx.c.text), (red, cx.c.warn), (needle, cx.c.accent)])
+
+
 def make_all():
-    return [Waterfall(), Scope(), Vector(), Radial(), Vinyl(), Reel(), Fire(), Starfield(), Ripples(), Matrix()]
+    return [Waterfall(), Scope(), Vector(), Radial(), Vinyl(), Reel(), Fire(), Starfield(), Ripples(), Matrix(),
+            Tunnel(), Plasma(), Aurora(), VUMeters()]

@@ -33,19 +33,20 @@ Docs site: https://fourzerosix.github.io/DanEQ/
 3. [Quick start](#quick-start)
 4. [Install](#install) - Linux, macOS, iPhone/iPad, ThinLinc, Docker, dependencies, uninstall
 5. [Usage examples](#usage-examples)
-6. [Keys, mouse and the Esc menu](#keys-mouse-and-the-esc-menu)
-7. [Effects rack](#effects-rack)
-8. [Visualizations, bar styles, themes](#visualizations-bar-styles-themes)
-9. [Test signals and easter eggs](#test-signals-and-easter-eggs)
-10. [Public domain clips](#public-domain-clips)
-11. [Nerd mode](#nerd-mode)
-12. [Files and settings](#files-and-settings)
-13. [How it works](#how-it-works)
-14. [Command line reference](#command-line-reference)
-15. [Troubleshooting](#troubleshooting)
-16. [Development and testing](#development-and-testing)
-17. [Publishing](#publishing)
-18. [FAQ and roadmap](#faq-and-roadmap)
+6. [Playing files: transport, tempo, pitch and screw](#playing-files-transport-tempo-pitch-and-screw)
+7. [Keys, mouse and the Esc menu](#keys-mouse-and-the-esc-menu)
+8. [Effects rack](#effects-rack)
+9. [Visualizations, bar styles, themes](#visualizations-bar-styles-themes)
+10. [Test signals and easter eggs](#test-signals-and-easter-eggs)
+11. [Public domain clips](#public-domain-clips)
+12. [Nerd mode](#nerd-mode)
+13. [Files and settings](#files-and-settings)
+14. [How it works](#how-it-works)
+15. [Command line reference](#command-line-reference)
+16. [Troubleshooting](#troubleshooting)
+17. [Development and testing](#development-and-testing)
+18. [Publishing](#publishing)
+19. [FAQ and roadmap](#faq-and-roadmap)
 
 ## What you get
 
@@ -53,8 +54,13 @@ Docs site: https://fourzerosix.github.io/DanEQ/
   auto headroom, RBJ biquad filters in real time. Export your curve as Equalizer APO / EasyEffects text.
 - **Effects rack**: compressor, overdrive, bitcrusher, megaphone, phaser, flanger, chorus, tremolo, echo,
   reverb and stereo widener, each with braille rotary knobs.
-- **11 views**: spectrum (6 bar styles), waterfall, scope, vectorscope, radial, spinning vinyl record,
-  reel-to-reel tape deck, fire, starfield, ripples, matrix rain. 20 color themes. 60 fps.
+- **15 views**: spectrum (6 bar styles), waterfall, scope, vectorscope, radial, spinning vinyl record,
+  reel-to-reel tape deck, fire, starfield, ripples, matrix rain, tunnel, plasma, aurora, analog VU meters.
+  30 color themes, with btop-style theme background on/off (transparency). 60 fps.
+- **File player**: open files and folders from inside the app (or on the command line), playlists, play/pause,
+  previous/next, seek, repeat, shuffle, with every EQ band, effect and visual working on the music.
+- **Pitch, tempo and SCREW** knobs for file playback: change tempo without pitch, pitch without tempo, or slow both
+  together like a record (the SCREW knob is a styrofoam cup, a nod to DJ Screw).
 - **Nerd mode**: btop-style audio process, stream and device monitor.
 - **Esc menu** like btop, resizable panels (keys and mouse drag), full mouse support.
 - **Test signals**: 17 synthesized animals, cartoon sound effects, a bullhorn loudspeaker, binaural beats,
@@ -260,6 +266,48 @@ daneq --fps 30                          # lighter on slow remote sessions
 daneq --no-mouse                        # if your terminal mangles mouse reporting
 ```
 
+## Playing files: transport, tempo, pitch and screw
+
+Give DanEQ files, folders or playlists, or press `O` inside the app (also in the Esc menu under *Open file...*):
+
+```bash
+daneq song.flac                       # one file
+daneq ~/Music/Album/                  # a folder (add --recursive for sub-folders)
+daneq a.mp3 b.ogg mixtape.m3u         # any mix of files and playlists
+daneq --shuffle --repeat all ~/Music  # shuffle the folder forever
+daneq --once song.mp3                 # quit when it ends instead of staying open
+daneq --screw 0.75 beat.wav           # start slowed to 75 percent, pitch and tempo together
+daneq --tempo 120 --pitch -2 song.mp3 # 20 percent faster, two semitones lower
+```
+
+A transport bar appears under the header while a file is loaded: `|<  <<  [||]  >>  >|`, a time display, a seek bar,
+the track number and the shuffle and repeat switches. Everything is clickable.
+
+| Key | Action |
+| --- | --- |
+| `O` | open the file browser |
+| Space | play / pause |
+| `z` / `x` | previous / next track (previous restarts the track if you are more than 3 seconds in) |
+| `<` / `>` | seek back / forward 5 seconds |
+| `R` | repeat: off, all, one |
+| `S` | shuffle on/off |
+
+**File browser**: Up/Down move, Enter opens a folder or plays the file (the whole folder becomes the playlist, starting
+at that file), Space marks files to build your own playlist, Backspace or Left goes up, `~` home, `.` shows hidden files,
+Esc closes. It remembers the last folder. You can also open a file while a test signal or live audio is running and
+return with *Back to live input* in the Esc menu.
+
+**Speed controls**: press `f`, then Shift-Tab (or Tab until the last tab) for the **Speed** page.
+
+| Knob | What it does |
+| --- | --- |
+| Pitch (-12 to +12 semitones) | changes pitch, keeps tempo |
+| Tempo (50 to 200 percent) | changes tempo, keeps pitch |
+| SCREW (0.50x to 1.25x) | slows or speeds pitch and tempo together, like a record; the cup fills as you slow it down |
+
+Pitch and tempo use WSOLA time stretching with a cubic resampler; with all three at neutral the audio is bit-exact.
+Moving the knobs during playback is click-free. These controls apply to file playback, not to live system audio.
+
 ## Keys, mouse and the Esc menu
 
 Press **Esc** for a btop-style menu (view, bar style, theme, EQ preset, FX rack, nerd mode, auto headroom,
@@ -289,6 +337,7 @@ the mouse works too. Press `?` for an in-app key list.
 | `n` | nerd mode |
 | `m` | mute |
 | `e` | export Equalizer APO text |
+| `B` | theme background true/false (transparent when false) |
 | `s` | save settings |
 | `?` | help |
 | `q` | quit (settings are saved automatically) |
@@ -322,11 +371,13 @@ oversampled, so extreme drive can alias.
 ## Visualizations, bar styles, themes
 
 **Views** (`v` / `V` or `--view`): spectrum, waterfall, scope, vectorscope, radial, vinyl, reel-to-reel, fire,
-starfield, ripples, matrix. The audio-reactive ones respond to bass, mid and treble separately.
+starfield, ripples, matrix, tunnel, plasma, aurora, VU meters. The audio-reactive ones respond to bass, mid and treble separately.
 
 **Bar styles** (`g` or `--style`): braille, line, mirror, dots, blocks, ascii.
 
-**Themes** (`c` / `C` or `--theme`): `classic`, `ice`, `fire`, `synthwave`, `mono`, `ocean`, `forest`, `sunset`, `vaporwave`, `matrix`, `gold`, `lava`, `aurora`, `candy`, `nord`, `dracula`, `gruvbox`, `cyberpunk`, `rainbow`, `thermal`.
+**Themes** (`c` / `C` or `--theme`): `classic`, `ice`, `fire`, `synthwave`, `mono`, `ocean`, `forest`, `sunset`, `vaporwave`, `matrix`, `gold`, `lava`, `aurora`, `candy`, `nord`, `dracula`, `gruvbox`, `cyberpunk`, `rainbow`, `thermal`, `tokyonight`, `solarized`, `monokai`, `catppuccin`, `everforest`, `rosepine`, `kanagawa`, `sakura`, `toxic`, `bubblegum`.
+
+**Theme background**: like btop's `theme_background`, each theme paints its own background color. Press `B`, use the Esc menu (*Theme background true/false*) or start with `--transparent` to let your terminal's own background or transparency show through. The choice is saved.
 
 **EQ presets**: `Flat`, `Bass boost`, `Treble boost`, `Vocal`, `Loudness`, `Rock`, `Electronic`, `Classical`.
 
@@ -418,11 +469,19 @@ daneq --clip infamy     # FDR, "a date which will live in infamy"
 daneq --clip fdr        # FDR, the full 8 Dec 1941 address
 daneq --clip jfk        # JFK inaugural address
 daneq --clip cuba       # JFK Cuban Missile Crisis address
+daneq --clip jazzsinger # The Jazz Singer (1927): "You ain't heard nothin' yet" (first talkie line)
+daneq --clip barbra     # Night of the Living Dead (1968): "They're coming to get you, Barbra!"
+daneq --clip farmhouse  # Night of the Living Dead: "They know we're in here now"
+daneq --clip fire       # Night of the Living Dead: "They're afraid of fire"
 daneq --clip https://example.org/some.ogg      # any URL
 daneq --clip ~/Music/thing.flac                # any local file
 ```
 
-These are works of the US government (public domain under 17 USC 105) hosted on Wikimedia Commons. Add your own
+The speeches are works of the US government (public domain under 17 USC 105). The Jazz Singer (1927) entered the US
+public domain in 2023, and Night of the Living Dead (1968) was released without a copyright notice, so both are
+public domain in the US. All are hosted on Wikimedia Commons. The Night of the Living Dead clips are cut out of the
+full film on your machine with ffmpeg (only that part is downloaded) and cached as a small WAV; they need ffmpeg.
+The cut points come from the film's subtitle file on Commons; if one is off by a few seconds, edit `start` in `clips.json`. Add your own
 named clips in `~/.config/daneq/clips.json`:
 
 ```json
@@ -473,20 +532,21 @@ usage: daneq [-h] [--demo [NAME]] [--beat HZ|NAME] [--carrier HZ]
              [--backend {auto,pulse,portaudio}] [--input DEVICE]
              [--output DEVICE] [--list-devices] [--no-output] [--sink NAME]
              [--capture SOURCE] [--rate RATE] [--latency MS] [--loop]
-             [--bands {4,6,8,10}]
+             [--repeat {off,all,one}] [--shuffle] [--once] [--recursive]
+             [--pitch ST] [--tempo PCT] [--screw RATIO] [--bands {4,6,8,10}]
              [--preset {Flat,Bass boost,Treble boost,Vocal,Loudness,Rock,Electronic,Classical}]
-             [--theme {classic,ice,fire,synthwave,mono,ocean,forest,sunset,vaporwave,matrix,gold,lava,aurora,candy,nord,dracula,gruvbox,cyberpunk,rainbow,thermal}]
-             [--view {spectrum,waterfall,scope,vectorscope,radial,vinyl,reel-to-reel,fire,starfield,ripples,matrix}]
+             [--theme {classic,ice,fire,synthwave,mono,ocean,forest,sunset,vaporwave,matrix,gold,lava,aurora,candy,nord,dracula,gruvbox,cyberpunk,rainbow,thermal,tokyonight,solarized,monokai,catppuccin,everforest,rosepine,kanagawa,sakura,toxic,bubblegum}]
+             [--view {spectrum,waterfall,scope,vectorscope,radial,vinyl,reel-to-reel,fire,starfield,ripples,matrix,tunnel,plasma,aurora,vu-meters}]
              [--style {braille,line,mirror,dots,blocks,ascii}] [--fx LIST]
-             [--fps N] [--nerd] [--no-mouse] [--list] [--export]
-             [--list-presets] [--restore] [--selftest] [--version]
-             [file]
+             [--fps N] [--nerd] [--transparent] [--no-mouse] [--list]
+             [--export] [--list-presets] [--restore] [--selftest] [--version]
+             [FILE ...]
 
 DanEQ: a btop-style terminal equalizer, effects rack and audio visualizer.
 
 positional arguments:
-  file                  audio file to play through DanEQ (WAV, or anything
-                        ffmpeg/soundfile reads)
+  FILE                  audio files, folders or .m3u playlists to play through
+                        DanEQ (WAV, FLAC, OGG, MP3, M4A, ...)
 
 options:
   -h, --help            show this help message and exit
@@ -515,21 +575,34 @@ audio routing:
   --capture SOURCE      capture from this source instead of the virtual sink
   --rate RATE           sample rate (default 48000)
   --latency MS          stream latency in ms (default 30)
-  --loop                loop FILE
+  --loop                same as --repeat all
+
+playback (files and folders):
+  --repeat {off,all,one}
+                        repeat mode (default off)
+  --shuffle             shuffle the playlist
+  --once                quit when the playlist ends instead of staying open
+  --recursive           include sub-folders when a folder is given
+  --pitch ST            pitch shift in semitones, -12 to 12 (tempo unchanged)
+  --tempo PCT           tempo in percent, 50 to 200 (pitch unchanged)
+  --screw RATIO         screw mode: slow pitch and tempo together like a
+                        record, 0.5 to 1.25 (try 0.75)
 
 interface:
   --bands {4,6,8,10}    number of EQ bands (default 10)
   --preset {Flat,Bass boost,Treble boost,Vocal,Loudness,Rock,Electronic,Classical}
                         start with this EQ preset
-  --theme {classic,ice,fire,synthwave,mono,ocean,forest,sunset,vaporwave,matrix,gold,lava,aurora,candy,nord,dracula,gruvbox,cyberpunk,rainbow,thermal}
+  --theme {classic,ice,fire,synthwave,mono,ocean,forest,sunset,vaporwave,matrix,gold,lava,aurora,candy,nord,dracula,gruvbox,cyberpunk,rainbow,thermal,tokyonight,solarized,monokai,catppuccin,everforest,rosepine,kanagawa,sakura,toxic,bubblegum}
                         color theme
-  --view {spectrum,waterfall,scope,vectorscope,radial,vinyl,reel-to-reel,fire,starfield,ripples,matrix}
+  --view {spectrum,waterfall,scope,vectorscope,radial,vinyl,reel-to-reel,fire,starfield,ripples,matrix,tunnel,plasma,aurora,vu-meters}
                         start in this view
   --style {braille,line,mirror,dots,blocks,ascii}
                         spectrum bar style
   --fx LIST             enable effects at start, e.g. reverb,echo,comp
   --fps N               target frame rate (default 60)
   --nerd                start in nerd mode (audio processes and streams)
+  --transparent         do not paint the theme background (use the terminal's
+                        own)
   --no-mouse            disable mouse support
 
 maintenance:
@@ -560,6 +633,8 @@ virtual sink.
 | macOS: garbled box characters | Use Homebrew Python and iTerm2 or Terminal.app with UTF-8 |
 | macOS: output stays on BlackHole after exit | Install `switchaudio-osx`, or switch the output back in System Settings > Sound |
 | `pip` says it installed `UNKNOWN` | Old pip/setuptools ignored the metadata: run `scripts/install.sh` (it upgrades pip in a venv) |
+| Pitch, tempo and SCREW do nothing | They apply to file playback only; open a file with `O` |
+| A file will not play | Install ffmpeg, or `pip install "daneq[audio]"`; the player shows the reason in the transport bar |
 | Terminal too small | Needs at least 80x24 (more bands need a little more width) |
 | Mouse does odd things | `--no-mouse` |
 | ThinLinc: no sound | Enable audio in the client; check `pactl info` inside the session |
@@ -589,7 +664,7 @@ site at https://fourzerosix.github.io/DanEQ/. See `RELEASING.md` for the one-tim
 
 **Can I use it as a permanent system EQ?** Run it in a terminal multiplexer. A headless daemon mode is on the roadmap.
 
-**Roadmap ideas**: headless daemon with systemd user unit; Equalizer APO import (AutoEq headphone profiles);
+**Roadmap ideas**: gapless playback and cover art; headless daemon with systemd user unit; Equalizer APO import (AutoEq headphone profiles);
 named user presets saved from the menu; per-app routing; recording the processed output to WAV; MIDI/OSC control;
 Windows WASAPI loopback; a native iOS app; pitch shifting and convolution reverb.
 

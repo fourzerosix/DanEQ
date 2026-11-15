@@ -11,8 +11,11 @@ import numpy as np
 
 from . import __version__, visuals
 from .braille import Canvas, blit
+from .browser import Browser, human_size
 from .dsp import GAIN_MAX, GAIN_MIN, PRESET_ORDER, Spectrum, fmt_freq, preset_gains, to_apo
+from .effects import SpeedControl
 from .nerd import Collector, NerdView
+from .player import AUDIO_EXTS, format_time, scan
 from .themes import STEPS, THEME_ORDER, THEMES, gradient, rgb_to_256
 
 MIN_H = 24
@@ -27,7 +30,9 @@ HELP = [
     ("r", "reset all (FX: reset effect)"), ("b", "bypass EQ (FX mode: rack)"),
     ("p / P", "next / previous EQ preset"), ("[ / ]", "preamp -/+ 0.5 dB"),
     ("a", "auto headroom"), ("f", "toggle FX rack"),
-    ("Tab / 1-9", "FX: next effect / pick"), ("o / Space", "FX: effect on/off"),
+    ("Tab / 1-9", "FX: next effect / pick (last tab: Speed)"), ("o", "FX: effect on/off"),
+    ("O", "open a file or folder"), ("Space", "play / pause"), ("z / x", "previous / next track"),
+    ("< / >", "seek -5 s / +5 s"), ("R / S", "repeat mode / shuffle"), ("B", "theme background true/false"),
     ("v / V", "next / previous view"), ("g", "spectrum bar style"),
     ("c / C", "next / previous theme"), ("t", "spectrum tilt"), (", / .", "spectrum sensitivity"),
     ("( / )", "bottom panel shorter / taller"), ("{ / }", "faders narrower / wider"),
@@ -38,31 +43,55 @@ HELP = [
 
 
 class Colors:
-    def __init__(self, theme="classic"):
+    """Color pairs. With use_bg the theme's background color is painted (btop's `theme_background`);
+    without it the terminal's own background shows through (transparency)."""
+
+    def __init__(self, theme="classic", use_bg=True):
         curses.start_color()
         try:
             curses.use_default_colors()
-            self.bg = -1
+            self.default_bg = -1
         except curses.error:
-            self.bg = curses.COLOR_BLACK
+            self.default_bg = curses.COLOR_BLACK
         self.rich = curses.COLORS >= 256
         self.theme = "classic"
-
-        def mk(n, fg_rich, fg_basic, extra=0):
-            curses.init_pair(n, fg_rich if self.rich else fg_basic, self.bg)
-            return curses.color_pair(n) | (0 if self.rich else extra)
-
-        self.border = mk(60, 244, 7, curses.A_DIM)
-        self.title = mk(61, 51, 6) | curses.A_BOLD
-        self.dim = mk(63, 240, 7, curses.A_DIM)
-        self.ok = mk(64, 46, 2)
-        self.warn = mk(65, 196, 1) | curses.A_BOLD
-        self.text = mk(67, 252, 7)
+        self.use_bg = bool(use_bg)
         self.set_theme(theme)
+
+    def _mk(self, n, fg_rich, fg_basic, extra=0):
+        curses.init_pair(n, fg_rich if self.rich else fg_basic, self.bg)
+        return curses.color_pair(n) | (0 if self.rich else extra)
+
+    def _bg_index(self, th):
+        """Color index for the theme background, or the terminal default when transparent."""
+        if not (self.use_bg and self.rich and "bg" in th):
+            return self.default_bg
+        r, g, b = th["bg"]
+        try:
+            if curses.can_change_color():
+                # Redefine a dark grey slot so the exact tint shows. Terminals that ignore the request
+                # keep that slot's original dark grey, which is still readable.
+                curses.init_color(233, int(r * 1000 / 255), int(g * 1000 / 255), int(b * 1000 / 255))
+                return 233
+        except curses.error:
+            pass
+        return rgb_to_256(r, g, b)
+
+    def set_use_bg(self, flag):
+        self.use_bg = bool(flag)
+        self.set_theme(self.theme)
 
     def set_theme(self, name):
         self.theme = name if name in THEMES else "classic"
         th = THEMES[self.theme]
+        self.bg = self._bg_index(th)
+        self.border = self._mk(60, 244, 7, curses.A_DIM)
+        self.title = self._mk(61, 51, 6) | curses.A_BOLD
+        self.dim = self._mk(63, 240, 7, curses.A_DIM)
+        self.ok = self._mk(64, 46, 2)
+        self.warn = self._mk(65, 196, 1) | curses.A_BOLD
+        self.text = self._mk(67, 252, 7)
+        self.screen = self._mk(68, 252, 7) if self.bg != self.default_bg else curses.color_pair(0)
         idx = gradient(th["a"], STEPS) if self.rich else GRAD_8
         self.grad = []
         for i, c in enumerate(idx):
@@ -80,13 +109,26 @@ class Colors:
 
 
 class App:
-    def __init__(self, scr, engine, eq, fx, cfg, info, mouse=True, collector=None):
+    def __init__(self, scr, engine, eq, fx, cfg, info, mouse=True, collector=None, speed=None):
         self.scr, self.engine, self.eq, self.fx, self.cfg, self.info = scr, engine, eq, fx, cfg, info
         self.vis = visuals.make_all()
         self.view_names = ["Spectrum"] + [v.name for v in self.vis]
         self.view = self._pick(cfg.get("view"), self.view_names)
         self.style = max(visuals.STYLES.index(cfg.get("style", "braille")) if cfg.get("style") in visuals.STYLES else 0, 0)
         self.sel, self.fsel, self.kidx = 0, 0, 0
+        sp = cfg.get("speed") if speed is None else None
+        self.speed = speed if speed is not None else SpeedControl(engine.rate)
+        if isinstance(sp, dict):
+            for key in ("pitch", "tempo", "screw"):
+                if key in sp:
+                    try:
+                        self.speed.p[key] = float(sp[key])
+                    except (TypeError, ValueError):
+                        pass
+            self.speed.enabled = bool(sp.get("on", True))
+        self.stages = self.fx.fx + [self.speed]
+        self.browser = None
+        self.tbar = []
         self.mode = "eq"
         self.spec = Spectrum(engine.rate, engine.nfft)
         self.tilt = float(cfg.get("tilt", 3.0))
@@ -132,7 +174,21 @@ class App:
                 curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
             except curses.error:
                 pass
-        self.c = Colors(cfg.get("theme", "classic"))
+        self.c = Colors(cfg.get("theme", "classic"), bool(cfg.get("theme_background", True)))
+        self.apply_background()
+
+    def apply_background(self):
+        try:
+            self.scr.bkgd(ord(" "), self.c.screen)
+        except curses.error:
+            pass
+
+    @property
+    def player(self):
+        return getattr(self.engine.source, "player", None)
+
+    def stage(self):
+        return self.stages[self.fsel % len(self.stages)]
 
     @staticmethod
     def _pick(name, names):
@@ -140,8 +196,9 @@ class App:
             return 0
         if isinstance(name, int):
             return name % len(names)
-        low = [n.lower() for n in names]
-        return low.index(str(name).lower()) if str(name).lower() in low else 0
+        low = [n.lower().replace(" ", "-") for n in names]
+        key = str(name).lower().replace(" ", "-")
+        return low.index(key) if key in low else 0
 
     # ---- primitives --------------------------------------------------------------
     def put(self, y, x, s, attr=0):
@@ -204,7 +261,8 @@ class App:
     # ---- layout ----------------------------------------------------------------------
     def compute_layout(self):
         H, W = self.H, self.W
-        body = H - 2
+        top = 2 if self.player else 1
+        body = H - top - 1
         bottom = self.bottom_h or max(11, int(body * 0.5))
         bottom = max(11, min(int(bottom), body - 8))
         nb = self.eq.nbands
@@ -213,7 +271,7 @@ class App:
         right = W - left
         if right < 20:
             left, right = W, 0
-        self.lay = dict(spec_h=body - bottom, by=1 + body - bottom, bottom=bottom, left=left, right=right, fw=fw)
+        self.lay = dict(top=top, spec_h=body - bottom, by=top + body - bottom, bottom=bottom, left=left, right=right, fw=fw)
 
     # ---- header / footer ---------------------------------------------------------------
     def draw_header(self):
@@ -246,10 +304,12 @@ class App:
             keys = "nerd mode:  ^/v select  o sort  n back  v view  c theme  ? help  q quit"
         elif self.mode == "fx":
             keys = ("FX:  </> knob  ^/v adjust  Tab effect  o on/off  b rack bypass  r reset  f back to EQ  "
-                    "v view  ? help  q quit")
+                    "Space play  v view  ? help  q quit")
         else:
-            keys = ("Esc menu  ? help  </> band  ^/v gain  b bypass  p preset  a headroom  f fx  v view  g style  "
-                    "c theme  n nerd  q quit")
+            keys = ("Esc menu  ? help  O open  Space play  z/x track  < > seek  arrows EQ  f fx  v view  g style  "
+                    "c theme  B bg  q quit") if self.player else (
+                "Esc menu  ? help  O open file  </> band  ^/v gain  b bypass  p preset  f fx  v view  g style  "
+                "c theme  B bg  n nerd  q quit")
         self.put(self.H - 1, 1, keys, self.c.dim)
 
     # ---- analyzer panel -------------------------------------------------------------------
@@ -335,13 +395,46 @@ class App:
             self.put(iy + ih - 1, cx - len(lab) // 2, lab, (self.c.accent | curses.A_REVERSE) if sel else self.c.dim)
 
     # ---- FX rack ------------------------------------------------------------------------------
+    def draw_cup(self, ty, kx, fx, selected):
+        """The SCREW knob: a styrofoam cup that fills as you slow the record down."""
+        lo, hi = 0.5, 1.25
+        screw = fx.p["screw"]
+        fill = 0.0 if screw >= 1.0 else min(max((1.0 - screw) / (1.0 - lo), 0.0), 1.0)
+        cup, liquid, ridges, straw = (Canvas(5, 4) for _ in range(4))
+        wall_l = lambda yy: 2.0 * (yy - 1) / 13.0            # noqa: E731
+        cup.hspan(1, 0, 9)
+        cup.hspan(2, 0, 9)
+        cup.line(0, 1, 2, 14)
+        cup.line(9, 1, 7, 14)
+        cup.hspan(14, 2, 7)
+        for yy in (6, 10):
+            for xx in range(int(wall_l(yy)) + 1, 9 - int(wall_l(yy)), 2):
+                ridges.set(xx, yy)
+        top_y = 13 - fill * 10
+        for yy in range(int(math.ceil(top_y)), 14):
+            if fill > 0:
+                for xx in range(int(math.ceil(wall_l(yy))) + 1, int(9 - wall_l(yy))):
+                    if (xx + yy) % 2 == 0:
+                        liquid.set(xx, yy)
+        straw.line(5, 13, 8, 0)
+        base = self.c.accent if selected else self.c.text
+        blit(self.put, ty, kx, [(ridges, self.c.dim), (liquid, self.c.accent), (straw, self.c.curve), (cup, base)])
+        label = "SCREW"
+        self.put(ty, kx + 7, label, self.c.accent if selected else self.c.dim)
+        self.put(ty + 1, kx + 7, fx.fmt("screw"), self.c.accent if selected else self.c.text)
+        pct = (screw - 1.0) * 100.0
+        self.put(ty + 2, kx + 7, f"{pct:+.0f}% speed", self.c.dim)
+        self.put(ty + 3, kx + 7, "pitch+tempo", self.c.dim)
+
     def draw_fx(self, y, x, h, w):
-        fx = self.fx.fx[self.fsel]
-        self.box(y, x, h, w, "FX rack", "RACK BYPASSED" if self.fx.bypass else f"{fx.name}: {'ON' if fx.enabled else 'off'}")
+        fx = self.stage()
+        is_speed = fx is self.speed
+        right = "RACK BYPASSED" if (self.fx.bypass and not is_speed) else f"{fx.name}: {'ON' if fx.enabled else 'off'}"
+        self.box(y, x, h, w, "FX rack", right)
         iy, ix, iw, ih = y + 1, x + 1, w - 2, h - 2
         self.tabs = []
         row, cur = 0, 0
-        for i, f in enumerate(self.fx.fx):
+        for i, f in enumerate(self.stages):
             label = ("●" if f.enabled else "○") + f.short
             if cur + len(label) + 1 > iw:
                 row, cur = row + 1, 0
@@ -356,20 +449,27 @@ class App:
         self.kidx = min(self.kidx, len(params) - 1)
         for j, (key, label, lo, hi, dflt, unit, kind) in enumerate(params):
             kx = ix + 1 + j * pitch
+            sel = j == self.kidx
+            if is_speed and key == "screw":
+                self.draw_cup(ty, kx, fx, sel)
+                self.knobs.append((ty, kx, 20, j))
+                continue
             cv = Canvas(4, 2)
             cv.circle(3.5, 3.5, 3.5)
             th = math.radians(135 + fx.norm(key) * 270)
             cv.line(3.5, 3.5, 3.5 + 2.8 * math.cos(th), 3.5 + 2.8 * math.sin(th))
-            sel = j == self.kidx
             blit(self.put, ty, kx + (pitch - 4) // 2, [(cv, self.c.accent if sel else (self.c.curve if fx.enabled else self.c.dim))])
             val = fx.fmt(key)
             self.put(ty + 2, kx + (pitch - len(label)) // 2, label, self.c.text if sel else self.c.dim)
             self.put(ty + 3, kx + (pitch - len(val)) // 2, val, self.c.accent if sel else self.c.text)
             self.knobs.append((ty, kx, pitch, j))
         status = fx.desc
-        meter = fx.meter()
-        if meter:
-            status += f"    {meter}"
+        if is_speed:
+            status = fx.summary() + ("" if self.player else "   (plays files only: press O to open one)")
+        else:
+            meter = fx.meter()
+            if meter:
+                status += f"    {meter}"
         self.put(ty + 5, ix + 1, status[: iw - 2], self.c.dim)
 
     # ---- response / meters ----------------------------------------------------------------------
@@ -492,6 +592,11 @@ class App:
             (self.collector.active.set if self.nerd_on else self.collector.active.clear)()
         return None
 
+    @staticmethod
+    def _stay(fn):
+        fn()
+        return "stay"
+
     def _do(self, fn):
         fn()
         return None
@@ -501,14 +606,27 @@ class App:
                 ("GPL-3.0 license  -  Jeremy Bell", lambda: "stay"), ("", lambda: "stay"), (RIP, lambda: "stay")]
 
     def menu_main(self):
+        pl, sw = self.player, self.engine.source
         items = [
             ("Resume", lambda: None),
+            ("Open file...", lambda: self._do(self.open_browser)),
             (f"View          {self.view_names[self.view]}  >", lambda: ("push", "View", self._list_builder(self.view_names, lambda: self.view_names[self.view], self._set_view))),
             (f"Bar style     {visuals.STYLES[self.style]}  >", lambda: ("push", "Bar style", self._list_builder(visuals.STYLES, lambda: visuals.STYLES[self.style], self._set_style))),
             (f"Theme         {self.c.theme}  >", lambda: ("push", "Theme", self._list_builder(THEME_ORDER, lambda: self.c.theme, self._set_theme))),
             (f"EQ preset     {self.preset}  >", lambda: ("push", "EQ preset", self._list_builder(PRESET_ORDER, lambda: self.preset, self._set_preset))),
             (f"FX rack       {'shown' if self.mode == 'fx' else 'hidden'}", self._toggle_fx),
         ]
+        if pl is not None:
+            items += [
+                (f"Play / Pause   {'playing' if pl.playing else 'paused'}", lambda: self._stay(pl.toggle)),
+                ("Previous track", lambda: self._stay(pl.prev)),
+                ("Next track", lambda: self._stay(pl.next)),
+                (f"Repeat         {pl.repeat}", lambda: self._stay(pl.cycle_repeat)),
+                (f"Shuffle        {'on' if pl.shuffle else 'off'}", lambda: self._stay(pl.toggle_shuffle)),
+            ]
+        if getattr(sw, "base", None) is not None and getattr(sw, "mode", "") == "player":
+            items.append(("Back to live input", lambda: self._do(sw.back_to_base)))
+        items.append((f"Theme background  {'true' if self.c.use_bg else 'false'}", lambda: self._stay(self.toggle_theme_bg)))
         if self.nerd:
             items.append((f"Nerd mode     {'on' if self.nerd_on else 'off'}", self._toggle_nerd))
         items += [
@@ -585,6 +703,196 @@ class App:
             self.put(y + 2 + i, x + 1, (" " + label).ljust(w - 2), attr)
 
     # ---- frame ---------------------------------------------------------------------------------------
+    # ---- transport bar -----------------------------------------------------------------------
+    def draw_transport(self, y):
+        pl = self.player
+        self.tbar = []
+        if pl is None:
+            return
+        c = self.c
+        x = 1
+
+        def btn(label, action, attr=None):
+            nonlocal x
+            self.put(y, x, label, attr if attr is not None else c.text)
+            self.tbar.append((y, x, len(label), action))
+            x += len(label) + 1
+
+        btn("|<", "prev")
+        btn("<<", "back")
+        btn("[||]" if pl.playing else "[ > ]", "toggle", c.accent)
+        btn(">>", "fwd")
+        btn(">|", "next")
+        pos, dur = pl.position(), pl.duration()
+        label = f"{format_time(pos)}/{format_time(dur)}"
+        self.put(y, x, label, c.text)
+        x += len(label) + 1
+        flags = f"{pl.index + 1}/{pl.count}"
+        tail = f" {flags} "
+        rep_txt = f"[R:{pl.repeat}]"
+        shuf_txt = "[S]" if pl.shuffle else "[ ]"
+        reserve = len(tail) + len(rep_txt) + len(shuf_txt) + 4
+        bar_w = max(8, min(40, self.W - x - reserve - 12))
+        frac = min(max(pos / dur, 0.0), 1.0) if dur else 0.0
+        filled = int(round(frac * (bar_w - 1)))
+        self.put(y, x, "━" * filled, c.accent)
+        self.put(y, x + filled, "●", c.accent)
+        self.put(y, x + filled + 1, "─" * (bar_w - filled - 1), c.dim)
+        self.tbar.append((y, x, bar_w, "seek"))
+        self.tbar_seek = (x, bar_w)
+        x += bar_w + 1
+        self.put(y, x, tail, c.dim)
+        x += len(tail)
+        self.put(y, x, shuf_txt, c.accent if pl.shuffle else c.dim)
+        self.tbar.append((y, x, len(shuf_txt), "shuffle"))
+        x += len(shuf_txt) + 1
+        self.put(y, x, rep_txt, c.accent if pl.repeat != "off" else c.dim)
+        self.tbar.append((y, x, len(rep_txt), "repeat"))
+        x += len(rep_txt) + 2
+        text = pl.message or pl.title
+        self.put(y, x, text[: max(self.W - x - 1, 0)], c.warn if pl.message else c.title)
+
+    def transport(self, action, mx=0):
+        pl = self.player
+        if pl is None:
+            return
+        if action == "prev":
+            pl.prev()
+        elif action == "next":
+            pl.next()
+        elif action == "back":
+            pl.seek_rel(-10)
+        elif action == "fwd":
+            pl.seek_rel(10)
+        elif action == "toggle":
+            pl.toggle()
+        elif action == "repeat":
+            self.flash(f"repeat: {pl.cycle_repeat()}")
+        elif action == "shuffle":
+            self.flash(f"shuffle: {'on' if pl.toggle_shuffle() else 'off'}")
+        elif action == "seek":
+            x0, w = self.tbar_seek
+            dur = pl.duration()
+            if dur:
+                pl.seek_abs(min(max((mx - x0) / max(w - 1, 1), 0.0), 1.0) * dur)
+
+    # ---- file browser --------------------------------------------------------------------------
+    def open_browser(self):
+        start = self.cfg.get("last_dir")
+        pl = self.player
+        if pl is not None and pl.track is not None:
+            start = os.path.dirname(pl.track.path) or start
+        self.browser = Browser(start)
+
+    def play_files(self, paths, start=0):
+        expanded = scan(paths)
+        if not expanded:
+            self.flash("nothing to play there")
+            return
+        if len(expanded) != len(paths):
+            start = 0
+        sw = self.engine.source
+        if not hasattr(sw, "start_player"):
+            self.flash("playback is not available in this mode")
+            return
+        sw.start_player(expanded, min(start, len(expanded) - 1),
+                        repeat=self.cfg.get("repeat", "off"), shuffle=bool(self.cfg.get("shuffle", False)))
+        self.cfg["last_dir"] = os.path.dirname(expanded[min(start, len(expanded) - 1)])
+        self.browser = None
+        self.flash(f"playing {len(expanded)} track(s)")
+
+    def browser_key(self, k) -> bool:
+        b = self.browser
+        if k in (27, ord("q"), ord("Q")):
+            self.browser = None
+        elif k in (curses.KEY_UP, ord("k")):
+            b.move(-1)
+        elif k in (curses.KEY_DOWN, ord("j")):
+            b.move(1)
+        elif k == curses.KEY_PPAGE:
+            b.move(-10)
+        elif k == curses.KEY_NPAGE:
+            b.move(10)
+        elif k == curses.KEY_HOME:
+            b.idx = 0
+        elif k == curses.KEY_END:
+            b.idx = max(len(b.entries) - 1, 0)
+        elif k in (10, 13, curses.KEY_ENTER, curses.KEY_RIGHT, ord("l")):
+            res = b.activate()
+            if res:
+                self.play_files(*res)
+        elif k in (curses.KEY_LEFT, curses.KEY_BACKSPACE, 127, 8, ord("h")):
+            b.go_up()
+        elif k == ord("~"):
+            b.go_home()
+        elif k == ord("."):
+            b.toggle_hidden()
+        elif k == ord(" "):
+            b.toggle_mark()
+        elif k == curses.KEY_MOUSE:
+            self.browser_mouse()
+        return True
+
+    def browser_mouse(self):
+        try:
+            _, mx, my, _, st = curses.getmouse()
+        except curses.error:
+            return
+        b = self.browser
+        y0, x0, w, rows, top = self.browser_rect
+        if st & getattr(curses, "BUTTON4_PRESSED", 0):
+            b.move(-3)
+        elif st & getattr(curses, "BUTTON5_PRESSED", 0):
+            b.move(3)
+        elif (st & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED)) and x0 <= mx < x0 + w and y0 <= my < y0 + rows:
+            i = top + my - y0
+            if 0 <= i < len(b.entries):
+                if i == b.idx:
+                    res = b.activate()
+                    if res:
+                        self.play_files(*res)
+                else:
+                    b.idx = i
+
+    def draw_browser(self):
+        b = self.browser
+        w, h = min(self.W - 4, 84), min(self.H - 4, 28)
+        y, x = (self.H - h) // 2, (self.W - w) // 2
+        for r in range(h):
+            self.put(y + r, x, " " * w)
+        self.box(y, x, h, w, f"Open file  ({len(b.entries)} items, {len(b.marked)} marked)", "Enter open  Space mark  ~ home  . hidden  Esc")
+        path = str(b.cwd)
+        if len(path) > w - 4:
+            path = "..." + path[-(w - 7):]
+        self.put(y + 1, x + 2, path, self.c.title)
+        rows = h - 4
+        top = min(max(b.idx - rows // 2, 0), max(len(b.entries) - rows, 0))
+        self.browser_rect = (y + 2, x + 1, w - 2, rows, top)
+        for r in range(rows):
+            i = top + r
+            if i >= len(b.entries):
+                break
+            e = b.entries[i]
+            mark = "[x]" if e.path in b.marked else "   "
+            name = e.name + ("/" if e.is_dir else "")
+            size = "" if e.is_dir else human_size(e.size)
+            room = w - 4 - len(mark) - len(size) - 2
+            line = f"{mark} {name[:room]}".ljust(w - 4 - len(size)) + size
+            if i == b.idx:
+                attr = self.c.accent | curses.A_REVERSE
+            elif e.is_dir:
+                attr = self.c.title
+            else:
+                attr = self.c.text
+            self.put(y + 2 + r, x + 2, line, attr)
+        if b.error:
+            self.put(y + h - 2, x + 2, b.error[: w - 4], self.c.warn)
+
+    def toggle_theme_bg(self):
+        self.c.set_use_bg(not self.c.use_bg)
+        self.apply_background()
+        self.flash(f"theme background: {'true' if self.c.use_bg else 'false (transparent)'}")
+
     def draw(self):
         self.scr.erase()
         self.H, self.W = self.scr.getmaxyx()
@@ -595,12 +903,16 @@ class App:
             return
         self.update_meters()
         self.draw_header()
+        top = 2 if self.player else 1
+        self.tbar = []
+        if self.player:
+            self.draw_transport(1)
         if self.nerd_on and self.nerd:
-            self.nerd.draw(self, 1, 0, self.H - 2, self.W)
+            self.nerd.draw(self, top, 0, self.H - top - 1, self.W)
         else:
             self.compute_layout()
             L = self.lay
-            self.draw_analyzer(1, 0, L["spec_h"], self.W)
+            self.draw_analyzer(top, 0, L["spec_h"], self.W)
             by, bh = L["by"], L["bottom"]
             (self.draw_fx if self.mode == "fx" else self.draw_faders)(by, 0, bh, L["left"])
             if L["right"]:
@@ -610,6 +922,8 @@ class App:
         self.draw_rip()
         if self.show_help:
             self.draw_help()
+        if self.browser:
+            self.draw_browser()
         if self.menu:
             self.draw_menu()
         self.scr.refresh()
@@ -630,7 +944,7 @@ class App:
         self.preset = name
 
     def knob_nudge(self, direction, coarse=False):
-        fx = self.fx.fx[self.fsel]
+        fx = self.stage()
         key, _, lo, hi, _, _, kind = fx.PARAMS[self.kidx]
         if kind == "int":
             step = 2 if key == "stages" else 1
@@ -639,7 +953,7 @@ class App:
             fx.set_norm(key, fx.norm(key) + direction * (0.1 if coarse else 0.02))
 
     def select_fx(self, i):
-        self.fsel = i % len(self.fx.fx)
+        self.fsel = i % len(self.stages)
         self.kidx = 0
 
     def on_mouse(self):
@@ -651,6 +965,11 @@ class App:
         if st & curses.BUTTON1_RELEASED:
             self.drag = None
             return
+        if (st & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED)):
+            for ty, tx, tw, action in self.tbar:
+                if my == ty and tx <= mx < tx + tw:
+                    self.transport(action, mx)
+                    return
         wheel = (1 if st & getattr(curses, "BUTTON4_PRESSED", 0) else -1 if st & getattr(curses, "BUTTON5_PRESSED", 0) else 0)
         pressed = st & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED)
         moving = st & curses.REPORT_MOUSE_POSITION
@@ -678,7 +997,7 @@ class App:
             for ty, tx, n, i in self.tabs:
                 if pressed and my == ty and tx <= mx < tx + n:
                     if i == self.fsel:
-                        f = self.fx.fx[i]
+                        f = self.stages[i]
                         f.set_enabled(not f.enabled)
                     self.select_fx(i)
                     return
@@ -706,6 +1025,8 @@ class App:
         if self.show_help:
             self.show_help = False
             return True
+        if self.browser:
+            return self.browser_key(k)
         if self.menu:
             return self.menu_key(k)
         if k == 27:
@@ -726,6 +1047,33 @@ class App:
             self.nerd_on = not self.nerd_on
             (self.collector.active.set if self.nerd_on else self.collector.active.clear)()
             return True
+        pl = self.player
+        if k == ord("O"):
+            self.open_browser()
+            return True
+        if k == ord("B"):
+            self.toggle_theme_bg()
+            return True
+        if pl is not None:
+            handled = True
+            if k == ord(" "):
+                pl.toggle()
+            elif k == ord("z"):
+                pl.prev()
+            elif k == ord("x"):
+                pl.next()
+            elif k == ord("<"):
+                pl.seek_rel(-5)
+            elif k == ord(">"):
+                pl.seek_rel(5)
+            elif k == ord("R"):
+                self.flash(f"repeat: {pl.cycle_repeat()}")
+            elif k == ord("S"):
+                self.flash(f"shuffle: {'on' if pl.toggle_shuffle() else 'off'}")
+            else:
+                handled = False
+            if handled:
+                return True
         if k == ord("v"):
             self.view = (self.view + 1) % len(self.view_names)
             self.flash(f"view: {self.view_names[self.view]}")
@@ -820,7 +1168,7 @@ class App:
         return True
 
     def on_key_fx(self, k) -> bool:
-        fx = self.fx.fx[self.fsel]
+        fx = self.stage()
         np_ = len(fx.PARAMS)
         if k in (curses.KEY_LEFT, ord("h")):
             self.kidx = (self.kidx - 1) % np_
@@ -840,7 +1188,7 @@ class App:
             self.select_fx(self.fsel - 1)
         elif ord("1") <= k <= ord("9"):
             self.select_fx(k - ord("1"))
-        elif k in (ord("o"), ord(" ")):
+        elif k == ord("o"):
             fx.set_enabled(not fx.enabled)
             self.flash(f"{fx.name}: {'ON' if fx.enabled else 'off'}")
         elif k == ord("0"):
@@ -860,7 +1208,12 @@ class App:
         st = {**self.cfg, "bands": self.eq.nbands, "gains": gains, "preamp": self.eq.preamp,
               "tilt": self.tilt, "ceil": self.ceil, "theme": self.c.theme,
               "view": self.view_names[self.view], "style": visuals.STYLES[self.style],
-              "bw": self.bw, "fx": self.fx.state()}
+              "bw": self.bw, "fx": self.fx.state(), "theme_background": self.c.use_bg,
+              "speed": {"pitch": self.speed.p["pitch"], "tempo": self.speed.p["tempo"],
+                        "screw": self.speed.p["screw"], "on": self.speed.enabled}}
+        pl = self.player
+        if pl is not None:
+            st["repeat"], st["shuffle"] = pl.repeat, pl.shuffle
         st.pop("nerd_start", None)
         if self.bottom_h:
             st["bottom_h"] = int(self.bottom_h)
@@ -904,13 +1257,13 @@ class App:
                 k = self.scr.getch()
 
 
-def run(engine, eq, fx, cfg, info, mouse=True, collector=None):
+def run(engine, eq, fx, cfg, info, mouse=True, collector=None, speed=None):
     """Runs the TUI, returns the final state dict to persist."""
     os.environ.setdefault("ESCDELAY", "25")
     out = {}
 
     def main(scr):
-        app = App(scr, engine, eq, fx, cfg, info, mouse, collector)
+        app = App(scr, engine, eq, fx, cfg, info, mouse, collector, speed)
         try:
             app.run()
         finally:

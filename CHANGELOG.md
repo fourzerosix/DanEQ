@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.5
+- File player: open files, folders and .m3u/.pls playlists from the command line or with `O` (in-app file browser with
+  marking, hidden files, remembered folder); transport bar with previous, back, play/pause, forward, next, seek bar,
+  shuffle and repeat; keys Space, `z`, `x`, `<`, `>`, `R`, `S`; mouse clickable; `--repeat`, `--shuffle`, `--once`, `--recursive`
+- Pitch, tempo and SCREW knobs (the Speed page of the FX rack, last tab): WSOLA time stretching plus a cubic resampler,
+  click-free while moving, bit-exact when neutral; SCREW slows pitch and tempo together and its knob is a styrofoam cup;
+  `--pitch`, `--tempo`, `--screw`; `daneq --selftest` now checks them
+- Public domain movie dialogue: The Jazz Singer (1927) and three scenes from Night of the Living Dead (1968),
+  cut from the full film on demand with ffmpeg (`--clip jazzsinger|barbra|farmhouse|fire`)
+- Theme background true/false like btop (`B`, Esc menu, `--transparent`); exact tints on terminals that allow palette changes
+- 10 new themes (30 total): tokyonight, solarized, monokai, catppuccin, everforest, rosepine, kanagawa, sakura, toxic, bubblegum
+- 4 new visualizations (15 total): tunnel, plasma, aurora and analog VU meters
+- Esc menu: open file, transport items, back to live input, theme background
+- Space no longer toggles an effect (use `o`); Space is play/pause
+- Tests: playback engine, playlists, browser, clip slicing, and a pseudo-terminal test that drives the real interface
+
 ## 0.4.2
 - Fix CI and release builds: copies of the test files in `scripts/` made pytest abort with "import file mismatch"
   (exit code 2) on every runner. `setup.cfg` now pins `testpaths = tests` so stray files cannot do that again

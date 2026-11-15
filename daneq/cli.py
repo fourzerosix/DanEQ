@@ -11,13 +11,14 @@ import numpy as np
 
 from . import __version__, audio, config, sounds
 from .dsp import LAYOUTS, PRESET_ORDER, Equalizer, preset_gains, to_apo
-from .effects import ORDER, FxRack
+from .effects import ORDER, FxRack, SpeedControl
+from .player import SourceSwitch, scan
 from .themes import THEME_ORDER
 
 BLOCK = 1024
 SHORTCUTS = sorted(set(sounds.ALL) - {"music"}) + ["music"]
 VIEW_NAMES = ["spectrum", "waterfall", "scope", "vectorscope", "radial", "vinyl", "reel-to-reel",
-              "fire", "starfield", "ripples", "matrix"]
+              "fire", "starfield", "ripples", "matrix", "tunnel", "plasma", "aurora", "vu-meters"]
 STYLE_NAMES = ["braille", "line", "mirror", "dots", "blocks", "ascii"]
 
 
@@ -32,7 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="daneq", allow_abbrev=False,
         description="DanEQ: a btop-style terminal equalizer, effects rack and audio visualizer.",
         epilog="With no FILE, --demo or sound shortcut, DanEQ equalizes all system audio via a virtual sink.")
-    p.add_argument("file", nargs="?", help="audio file to play through DanEQ (WAV, or anything ffmpeg/soundfile reads)")
+    p.add_argument("files", nargs="*", metavar="FILE",
+                   help="audio files, folders or .m3u playlists to play through DanEQ (WAV, FLAC, OGG, MP3, M4A, ...)")
     src = p.add_argument_group("test signals and easter eggs")
     src.add_argument("--demo", nargs="?", const="music", choices=sorted(sounds.ALL), metavar="NAME",
                      help="built-in signal (see --list-demos); default: music")
@@ -59,7 +61,16 @@ def build_parser() -> argparse.ArgumentParser:
     io.add_argument("--capture", metavar="SOURCE", help="capture from this source instead of the virtual sink")
     io.add_argument("--rate", type=int, default=48000, help="sample rate (default 48000)")
     io.add_argument("--latency", type=int, default=30, metavar="MS", help="stream latency in ms (default 30)")
-    io.add_argument("--loop", action="store_true", help="loop FILE")
+    io.add_argument("--loop", action="store_true", help="same as --repeat all")
+    pb = p.add_argument_group("playback (files and folders)")
+    pb.add_argument("--repeat", choices=["off", "all", "one"], help="repeat mode (default off)")
+    pb.add_argument("--shuffle", action="store_true", help="shuffle the playlist")
+    pb.add_argument("--once", action="store_true", help="quit when the playlist ends instead of staying open")
+    pb.add_argument("--recursive", action="store_true", help="include sub-folders when a folder is given")
+    pb.add_argument("--pitch", type=float, metavar="ST", help="pitch shift in semitones, -12 to 12 (tempo unchanged)")
+    pb.add_argument("--tempo", type=float, metavar="PCT", help="tempo in percent, 50 to 200 (pitch unchanged)")
+    pb.add_argument("--screw", type=float, metavar="RATIO",
+                    help="screw mode: slow pitch and tempo together like a record, 0.5 to 1.25 (try 0.75)")
     ui = p.add_argument_group("interface")
     ui.add_argument("--bands", type=int, choices=sorted(LAYOUTS), help="number of EQ bands (default 10)")
     ui.add_argument("--preset", choices=PRESET_ORDER, help="start with this EQ preset")
@@ -69,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     ui.add_argument("--fx", metavar="LIST", help="enable effects at start, e.g. reverb,echo,comp")
     ui.add_argument("--fps", type=int, metavar="N", help="target frame rate (default 60)")
     ui.add_argument("--nerd", action="store_true", help="start in nerd mode (audio processes and streams)")
+    ui.add_argument("--transparent", action="store_true", help="do not paint the theme background (use the terminal's own)")
     ui.add_argument("--no-mouse", action="store_true", help="disable mouse support")
     misc = p.add_argument_group("maintenance")
     misc.add_argument("--list", action="store_true", help="list output sinks and exit")
@@ -112,6 +124,24 @@ def selftest() -> int:
         bad += not ok
         print(f"  fx {fx.name:<15s} finite and shape-preserving: {'PASS' if ok else 'FAIL'}")
         fx.set_enabled(False)
+    from .player import ArrayDecoder, TrackPlayback
+    tone = np.sin(2 * np.pi * 440 * np.arange(rate * 4) / rate) * 0.4
+    for label, (pitch, tempo, screw), want_len, want_hz in (
+            ("tempo 150%", (0.0, 1.5, 1.0), 4 / 1.5, 440.0), ("pitch +12 st", (12.0, 1.0, 1.0), 4.0, 880.0),
+            ("screw 0.5", (0.0, 1.0, 0.5), 8.0, 220.0)):
+        tp = TrackPlayback("selftest", rate, ArrayDecoder(tone, rate))
+        blocks, done = [], False
+        while not done and len(blocks) < 2000:
+            b, done = tp.render(BLOCK, tempo, pitch, screw)
+            blocks.append(b)
+        y = np.vstack(blocks)[:, 0]
+        nz = np.flatnonzero(np.abs(y) > 1e-4)
+        length = (nz[-1] + 1) / rate
+        seg = y[len(y) // 4: len(y) // 4 + 16384]
+        hz = np.argmax(np.abs(np.fft.rfft(seg * np.hanning(len(seg))))) * rate / len(seg)
+        ok = abs(length - want_len) < 0.1 and abs(hz - want_hz) < 0.02 * want_hz + 3
+        bad += not ok
+        print(f"  speed {label:<12s} length {length:5.2f}s (want {want_len:5.2f}) pitch {hz:6.1f} Hz (want {want_hz:.0f}): {'PASS' if ok else 'FAIL'}")
     print("RESULT:", "all checks passed" if not bad else f"{bad} check(s) failed")
     return 1 if bad else 0
 
@@ -177,14 +207,22 @@ def main(argv=None) -> int:
         nb = 10
     rate, mode = args.rate, "system"
     vsink = source = sink = collector = None
-    target = args.file
+    raw_paths = list(args.files)
     if args.clip:
         from . import clips
         try:
-            target = clips.resolve(args.clip)
+            raw_paths.append(clips.resolve(args.clip))
         except clips.ClipError as exc:
             return _die(str(exc))
-    live = not (target or args.demo)
+    playlist = scan(raw_paths, args.recursive) if raw_paths else []
+    if raw_paths and not playlist:
+        return _die("no audio files found in: " + ", ".join(raw_paths))
+    for pth in playlist:
+        if not os.path.exists(pth):
+            return _die(f"file not found: {pth}")
+    live = not (playlist or args.demo)
+    if args.transparent:
+        cfg["theme_background"] = False
     backend = args.backend
     if backend == "auto":
         backend = "pulse" if (sys.platform.startswith("linux") and audio.have_pulse_tools()) else \
@@ -195,16 +233,32 @@ def main(argv=None) -> int:
         signal.signal(sig, lambda *_: sys.exit(0))
 
     try:
-        if target:
-            mode = os.path.basename(target)
-            source, rate = audio.open_file(target, rate, BLOCK, args.loop)
+        speed = SpeedControl(rate)
+        saved_speed = cfg.get("speed")
+        if isinstance(saved_speed, dict):
+            for key in ("pitch", "tempo", "screw"):
+                try:
+                    speed.p[key] = float(saved_speed[key])
+                except (KeyError, TypeError, ValueError):
+                    pass
+            speed.enabled = bool(saved_speed.get("on", True))
+        for key, val, lo, hi in (("pitch", args.pitch, -12.0, 12.0), ("tempo", args.tempo, 50.0, 200.0), ("screw", args.screw, 0.5, 1.25)):
+            if val is not None:
+                speed.p[key] = min(max(float(val), lo), hi)
+                speed.enabled = True
+        if playlist:
+            mode = os.path.basename(playlist[0]) if len(playlist) == 1 else f"{len(playlist)} tracks"
+            repeat = args.repeat or ("all" if args.loop else cfg.get("repeat", "off"))
+            shuffle = args.shuffle or bool(cfg.get("shuffle", False))
+            source = SourceSwitch(None, rate, BLOCK, speed, once=args.once)
+            source.start_player(playlist, 0, repeat=repeat, shuffle=shuffle)
         elif args.demo:
             mode = f"demo:{args.demo}"
             try:
                 opts = {"beat": parse_beat(args.beat), "carrier": args.carrier}
             except (KeyError, ValueError):
                 return _die("--beat needs a number or one of delta, theta, alpha, beta, gamma, schumann")
-            source = audio.GenSource(sounds.ALL[args.demo](rate, BLOCK, **opts))
+            source = SourceSwitch(audio.GenSource(sounds.ALL[args.demo](rate, BLOCK, **opts)), rate, BLOCK, speed)
             if args.demo == "binaural":
                 mode = f"binaural {opts['beat']:g} Hz beat (use headphones)"
         if live and backend == "portaudio" and not args.no_output:
@@ -280,10 +334,12 @@ def main(argv=None) -> int:
         from . import ui
         collector = Collector()
         collector.start()
+        if not isinstance(source, SourceSwitch):
+            source = SourceSwitch(source, rate, BLOCK, speed)
         engine = Engine(eq, source, sink, rate, BLOCK, latency_ms=lat, fx=fx)
         engine.start()
         try:
-            state = ui.run(engine, eq, fx, cfg, info, mouse=not args.no_mouse, collector=collector)
+            state = ui.run(engine, eq, fx, cfg, info, mouse=not args.no_mouse, collector=collector, speed=speed)
         finally:
             engine.stop()
             collector.stop()
