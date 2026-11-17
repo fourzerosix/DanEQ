@@ -183,6 +183,29 @@ class App:
         except curses.error:
             pass
 
+    def paint_background(self):
+        """Explicitly paint the theme background across the visible screen.
+
+        ncurses may optimize ``erase()`` into the terminal's clear-screen
+        capability.  That capability clears with the terminal's default
+        background, not the color pair installed by ``bkgd()``.  Blank cells
+        carrying the same attributes as the window background can then be
+        treated as already cleared, leaving large areas transparent.  Give
+        the blank fill an otherwise invisible DIM attribute so ncurses emits
+        the background color; the UI is drawn over it immediately afterward.
+        """
+        if not (self.c.use_bg and self.c.rich) or self.W < 2 or self.H < 2:
+            return
+        attr = self.c.screen | curses.A_DIM
+        for y in range(self.H):
+            # ncurses returns ERR if addstr() advances past the lower-right
+            # cell. Leave that one cell alone; the footer is drawn afterward.
+            width = self.W - (2 if y == self.H - 1 else 1)
+            try:
+                self.scr.addstr(y, 0, " " * width, attr)
+            except curses.error:
+                continue
+
     @property
     def player(self):
         return getattr(self.engine.source, "player", None)
@@ -896,6 +919,7 @@ class App:
     def draw(self):
         self.scr.erase()
         self.H, self.W = self.scr.getmaxyx()
+        self.paint_background()
         need_w = max(80, self.eq.nbands * 4 + 2 + 20)
         if self.H < MIN_H or self.W < need_w:
             self.put(0, 0, f"DanEQ needs at least {need_w}x{MIN_H}; this terminal is {self.W}x{self.H}", self.c.warn)

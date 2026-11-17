@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.6
+- Fix theme background painting in the curses TUI.
+
 ## 0.4.5
 - File player: open files, folders and .m3u/.pls playlists from the command line or with `O` (in-app file browser with
   marking, hidden files, remembered folder); transport bar with previous, back, play/pause, forward, next, seek bar,
