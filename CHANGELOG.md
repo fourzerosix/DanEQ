@@ -2,6 +2,9 @@
 
 ## 0.4.6
 - Fix theme background painting in the curses TUI.
+- Fix theme background rendering on macOS and limited-color curses terminals.
+- Improve cross-platform terminal color handling.
+- Repair the portable Makefile version-bump workflow.
 
 ## 0.4.5
 - File player: open files, folders and .m3u/.pls playlists from the command line or with `O` (in-app file browser with
