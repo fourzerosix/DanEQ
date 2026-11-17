@@ -44,13 +44,7 @@ release-check:
 
 bump:
 	@test -n "$(V)" || (echo "usage: make bump V=0.4.1" && exit 1)
-	sed -i.bak 's/__version__ = ".*"/__version__ = "$(V)"/' daneq/__init__.py && rm -f daneq/__init__.py.bak
-	$(PYTHON) - <<'PY'
-	import re
-	s = open("CHANGELOG.md").read()
-	s = s.replace("# Changelog\n", "# Changelog\n\n## $(V)\n- \n", 1)
-	open("CHANGELOG.md", "w").write(s)
-	PY
+	@$(PYTHON) scripts/bump_version.py "$(V)"
 	@echo "Now edit CHANGELOG.md, commit, then: make release-check"
 
 clean:

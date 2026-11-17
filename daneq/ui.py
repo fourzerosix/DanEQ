@@ -63,9 +63,19 @@ class Colors:
         return curses.color_pair(n) | (0 if self.rich else extra)
 
     def _bg_index(self, th):
-        """Color index for the theme background, or the terminal default when transparent."""
-        if not (self.use_bg and self.rich and "bg" in th):
+        """Color index for the theme background, or the terminal default when transparent.
+
+        The full RGB-derived theme palette needs 256-color support.  Still paint
+        a dark background on basic 8/16-color terminals, though: macOS' curses
+        build can expose fewer colors than the terminal emulator itself, and
+        treating that as transparent makes the theme-background toggle appear
+        broken.  All DanEQ theme backgrounds are dark, so black is the safest
+        readable fallback when a precise 256-color match is unavailable.
+        """
+        if not (self.use_bg and "bg" in th):
             return self.default_bg
+        if not self.rich:
+            return curses.COLOR_BLACK if curses.COLORS > 0 else self.default_bg
         r, g, b = th["bg"]
         try:
             if curses.can_change_color():
@@ -192,9 +202,10 @@ class App:
         carrying the same attributes as the window background can then be
         treated as already cleared, leaving large areas transparent.  Give
         the blank fill an otherwise invisible DIM attribute so ncurses emits
-        the background color; the UI is drawn over it immediately afterward.
+        the background color.  This also works with the black fallback used
+        by terminals whose curses library exposes only 8/16 colors.
         """
-        if not (self.c.use_bg and self.c.rich) or self.W < 2 or self.H < 2:
+        if self.c.bg == self.c.default_bg or self.W < 2 or self.H < 2:
             return
         attr = self.c.screen | curses.A_DIM
         for y in range(self.H):
